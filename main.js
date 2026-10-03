@@ -55,6 +55,10 @@ const SOUND = {
   move: () => beep(700, 0.03),
   shortage: () => beep(180, 0.08),
   win: () => { beep(660, 0.15); setTimeout(() => beep(880, 0.25), 140); },
+  encounter: () => { beep(200, 0.12); setTimeout(() => beep(160, 0.16), 120); },
+  encWin: () => { beep(500, 0.09); setTimeout(() => beep(700, 0.12), 90); },
+  encLose: () => { beep(400, 0.09); setTimeout(() => beep(260, 0.14), 90); },
+  jump: () => { beep(500, 0.05); setTimeout(() => beep(900, 0.1), 60); },
 };
 function playEvents() {
   if (!game) return;
@@ -163,7 +167,19 @@ let game = null;
 let ui = { mode: 'idle', selectedShip: null, data: {} };
 let turnPassAckKey = null; // 最後に「はじめる」を押した合図（これと違えば渡す画面を出す）
 
-function migrateGame(g) { return g && g.rulesVersion === 1 ? g : null; } // 試作のあいだは形が違えば消す（9章）
+function migrateGame(g) {
+  if (!g || g.rulesVersion !== 1) return null; // 試作のあいだは形が大きく違えば消す（9章）
+  // 作業2（遭遇・名声）で足したフィールドは、作業1の古い保存にも補って引き継ぐ
+  if (!g.encounterDeck) g.encounterDeck = E.freshEncounterDeck(Math.random);
+  if (!g.encounterDiscard) g.encounterDiscard = [];
+  if (g.encounter === undefined) g.encounter = null;
+  if (g.encounterBalls === undefined) g.encounterBalls = null;
+  if (g.frozenShipId === undefined) g.frozenShipId = null;
+  if (!g.pendingWear) g.pendingWear = [];
+  if (!g.pendingWearDiscards) g.pendingWearDiscards = [];
+  g.players.forEach((p) => { if (p.tradeShipMarkers == null) p.tradeShipMarkers = 0; });
+  return g;
+}
 
 function showGame() { els.setupPanel.hidden = true; els.gamePanel.hidden = false; els.homeBtn.hidden = false; }
 function showSetup() { els.setupPanel.hidden = false; els.gamePanel.hidden = true; els.homeBtn.hidden = true; }
@@ -216,6 +232,22 @@ function scheduleCpu() {
     if (pending) cpuTimer = setTimeout(() => { CPU.cpuDiscardOne(game, pending.player); persistAndRender(); }, delay);
     return;
   }
+  if (game.phase === 'encounter') {
+    const enc = game.encounter;
+    if (enc && enc.pending && isCpuSeat(enc.idx)) {
+      cpuTimer = setTimeout(() => { CPU.cpuResolveEncounter(game); persistAndRender(); }, delay);
+    }
+    return;
+  }
+  if (game.phase === 'encounterWear') {
+    const w = game.pendingWear[0];
+    const d = !w ? game.pendingWearDiscards[0] : null;
+    const targetPlayer = w ? w.player : (d ? d.player : null);
+    if (targetPlayer != null && isCpuSeat(targetPlayer)) {
+      cpuTimer = setTimeout(() => { CPU.cpuResolveWearOne(game); persistAndRender(); }, delay);
+    }
+    return;
+  }
   const idx = E.currentPlayer(game);
   if (isHumanSeat(idx)) return; // 人の番・人の選ぶ場面は画面の操作を待つ
   if (game.phase.startsWith('setup')) { cpuTimer = setTimeout(() => { CPU.cpuSetupTurn(game); persistAndRender(); }, delay); return; }
@@ -234,15 +266,7 @@ function scheduleCpu() {
 // ================================================================
 // 盤
 // ================================================================
-function freeSpaceportSites(idx) {
-  const p = game.players[idx];
-  const seen = new Set();
-  p.spaceports.forEach((v) => E.spaceportSitesFor(game, v).forEach((s) => seen.add(s)));
-  return [...seen].filter((vid) => {
-    const v = game.board.vertices[vid];
-    return v.kind === 'spaceportSite' && v.spaceportOwner === idx && !v.building && !v.shipHere;
-  });
-}
+function freeSpaceportSites(idx) { return E.freeSpaceportSitesFor(game, idx); }
 function highlightSet() {
   if (!game) return new Set();
   const idx = E.currentPlayer(game);
@@ -250,6 +274,9 @@ function highlightSet() {
   if (game.phase === 'setupColony') return new Set(E.availableSetupColonySites(game));
   if (ui.mode === 'pickColonyShipSite' || ui.mode === 'pickTradeShipSite') return new Set(freeSpaceportSites(idx));
   if (ui.mode === 'pickSpaceportColony') return new Set(game.players[idx].colonies);
+  if (game.phase === 'encounter' && game.encounter && game.encounter.pending && game.encounter.pending.kind === 'jumpTarget') {
+    return new Set(E.spaceJumpTargets(game, game.encounter.pending.shipId));
+  }
   if (game.phase === 'flight' && ui.selectedShip) return new Set(E.shipReachableStops(game, ui.selectedShip).keys());
   return new Set();
 }
@@ -267,6 +294,10 @@ function onVertexTap(vid) {
   if (ui.mode === 'pickColonyShipSite') { if (E.buildColonyShip(game, vid)) { ui.mode = 'idle'; persistAndRender(); } return; }
   if (ui.mode === 'pickTradeShipSite') { if (E.buildTradeShip(game, vid)) { ui.mode = 'idle'; persistAndRender(); } return; }
   if (ui.mode === 'pickSpaceportColony') { if (E.buildSpaceport(game, vid)) { ui.mode = 'idle'; persistAndRender(); } return; }
+  if (game.phase === 'encounter' && game.encounter && game.encounter.pending && game.encounter.pending.kind === 'jumpTarget') {
+    if (E.encounterAnswer(game, { toVertexId: vid })) persistAndRender();
+    return;
+  }
   if (game.phase === 'flight') {
     const v = game.board.vertices[vid];
     if (ui.selectedShip) {
@@ -377,6 +408,12 @@ function phaseHint(idx) {
     case 'steal': return `${name}が盗む相手を選んでいます…`;
     case 'main': return `${name}の番。交易・建設のあと、母船を振って飛行へ`;
     case 'flight': return `${name}の番。船をタップ→行き先をタップ（速さ ${game.speed}）`;
+    case 'encounter': {
+      const enc = game.encounter;
+      if (enc && enc.pending && enc.pending.kind === 'jumpTarget') return `${name}の番。宇宙ジャンプ！光っている交点をタップ`;
+      return `${name}が遭遇中…`;
+    }
+    case 'encounterWear': return '摩耗：みんなの母船がすり減る…';
     case 'gameOver': return `${E.playerName(game, game.winner)} の勝ち！`;
     default: return '';
   }
@@ -389,13 +426,25 @@ function renderBanner() {
     I.renderBalls(wrap, game.ballsShown);
     extra = wrap.innerHTML;
   }
-  els.banner.innerHTML = `<div>${phaseHint(idx)}</div>${extra ? `<div>${extra}</div>` : ''}<div class="message__log">${escapeHtml(game.log[game.log.length - 1] || '')}</div>`;
+  els.banner.innerHTML = `<div>${phaseHint(idx)}</div>${extra ? `<div>${extra}</div>` : ''}${renderEncounterBallsHtml()}<div class="message__log">${escapeHtml(game.log[game.log.length - 1] || '')}</div>`;
+}
+// 遭遇の戦い・速さ比べで両者が振った玉（3.8: 両方の玉を見せる）。片付いたあとも次の遭遇まで残して見せる
+function renderEncounterBallsHtml() {
+  const b = game.encounterBalls;
+  if (!b) return '';
+  const wrapA = document.createElement('span'); I.renderBalls(wrapA, b.a);
+  let sideB = '';
+  if (b.b) {
+    const wrapB = document.createElement('span'); I.renderBalls(wrapB, b.b);
+    sideB = `<div class="enc-vs__side"><span>${escapeHtml(E.playerName(game, b.bIdx))}</span>${wrapB.innerHTML}</div>`;
+  }
+  return `<div class="enc-vs"><div class="enc-vs__side"><span>${escapeHtml(E.playerName(game, b.aIdx))}</span>${wrapA.innerHTML}</div>${sideB}</div>`;
 }
 
 function updateActionBar() {
   const idx = E.currentPlayer(game);
   const humanTurn = isHumanSeat(idx);
-  const show = humanTurn && !game.phase.startsWith('setup') && game.phase !== 'discard' && game.phase !== 'steal' && game.phase !== 'gameOver';
+  const show = humanTurn && (game.phase === 'main' || game.phase === 'flight');
   els.actionBar.style.display = show ? '' : 'none';
   els.diceBtn.hidden = !(humanTurn && game.phase === 'roll');
   els.tradeBtn.hidden = !(humanTurn && game.phase === 'main');
@@ -459,6 +508,48 @@ function renderSetupPortPanel() {
     confirm: () => { if (E.setupDoPortRound(game, d)) { ui.data.port = null; persistAndRender(); } },
   });
 }
+function renderEncounterPanel() {
+  const enc = game.encounter;
+  const def = E.ENCOUNTERS.find((d) => d.id === enc.cardId);
+  const idx = enc.idx;
+  const pending = enc.pending;
+  let body = '';
+  if (pending.kind === 'yesno') {
+    body = `<div class="sheet__row"><button class="card-btn" data-act="yes">はい</button><button class="card-btn" data-act="no">いいえ</button></div>`;
+  } else if (pending.kind === 'amount') {
+    body = `<div class="res-pick">${Array.from({ length: pending.max + 1 }, (_, n) => `<button data-act="amount" data-n="${n}">${n}枚</button>`).join('')}</div>`;
+  } else if (pending.kind === 'pickShip') {
+    body = `<div class="sheet__row">${game.players[idx].ships.map((s) => `<button class="card-btn" data-act="ship" data-id="${s.id}">${s.kind === 'colony' ? '植民船' : '交易船'}</button>`).join('')}</div>`;
+  } else if (pending.kind === 'pickResource') {
+    body = `<div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="res" data-r="${r}">${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>`;
+  } else if (pending.kind === 'pickUpgrade') {
+    body = `<div class="sheet__row">
+      <button class="card-btn" data-act="upg" data-k="booster">ブースター</button>
+      <button class="card-btn" data-act="upg" data-k="cannon">大砲</button>
+      <button class="card-btn" data-act="upg" data-k="pod">貨物ポッド</button></div>`;
+  }
+  els.panel.innerHTML = `<h2>遭遇: ${def.name}</h2><p>${escapeHtml(def.prompt)}</p>${body}`;
+  bindPanel({
+    yes: () => { E.encounterAnswer(game, { yes: true }); persistAndRender(); },
+    no: () => { E.encounterAnswer(game, { yes: false }); persistAndRender(); },
+    amount: (b) => { E.encounterAnswer(game, { amount: Number(b.dataset.n) }); persistAndRender(); },
+    ship: (b) => { E.encounterAnswer(game, { shipId: b.dataset.id }); persistAndRender(); },
+    res: (b) => { E.encounterAnswer(game, { res: b.dataset.r }); persistAndRender(); },
+    upg: (b) => { E.encounterAnswer(game, { kind: b.dataset.k }); persistAndRender(); },
+  });
+}
+function renderWearChoicePanel(w) {
+  const names = { booster: 'ブースター', cannon: '大砲', pod: '貨物ポッド' };
+  els.panel.innerHTML = `<h2>${E.playerName(game, w.player)}: 摩耗でどれを手放す？（同数）</h2>
+    <div class="sheet__row">${w.options.map((k) => `<button class="card-btn" data-act="pick" data-k="${k}">${names[k]}</button>`).join('')}</div>`;
+  bindPanel({ pick: (b) => { E.resolveWearChoice(game, w.player, b.dataset.k); persistAndRender(); } });
+}
+function renderWearDiscardPanel(d) {
+  const p = game.players[d.player];
+  els.panel.innerHTML = `<h2>${E.playerName(game, d.player)}: 手札が8枚以上。1枚捨てる</h2>
+    <div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="res" data-r="${r}" ${p.resources[r] <= 0 ? 'disabled' : ''}>${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>`;
+  bindPanel({ res: (b) => { E.resolveWearDiscard(game, d.player, b.dataset.r); persistAndRender(); } });
+}
 function renderBankTradePanel() {
   const idx = E.currentPlayer(game);
   const p = game.players[idx];
@@ -507,6 +598,18 @@ function renderOverlay() {
   }
   if (game.phase === 'steal' && isHumanSeat(idx)) { openPanel(); renderStealPanel(); return; }
   if (game.phase === 'setupPort' && isHumanSeat(idx)) { openPanel(); renderSetupPortPanel(); return; }
+  if (game.phase === 'encounter') {
+    const enc = game.encounter;
+    if (enc && enc.pending && enc.pending.kind !== 'jumpTarget' && isHumanSeat(enc.idx)) { openPanel(); renderEncounterPanel(); return; }
+    closePanel(); return;
+  }
+  if (game.phase === 'encounterWear') {
+    const w = game.pendingWear[0];
+    if (w) { if (isHumanSeat(w.player)) { openPanel(); renderWearChoicePanel(w); return; } closePanel(); return; }
+    const d = game.pendingWearDiscards[0];
+    if (d) { if (isHumanSeat(d.player)) { openPanel(); renderWearDiscardPanel(d); return; } closePanel(); return; }
+    closePanel(); return;
+  }
   if (ui.mode === 'bankTrade') { openPanel(); renderBankTradePanel(); return; }
   closePanel();
 }

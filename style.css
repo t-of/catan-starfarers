@@ -122,6 +122,8 @@ button { font: inherit; color: inherit; }
 .message__log { color: var(--muted); font-size: 12px; margin-top: 2px; }
 
 .ball { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin-right: 4px; border: 1px solid rgba(255, 255, 255, 0.4); }
+.enc-vs { display: flex; gap: 16px; align-items: center; margin: 4px 0; }
+.enc-vs__side { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
 
 .hand { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .hand__res { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--btn-edge); font-size: 11px; }

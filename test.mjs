@@ -280,6 +280,140 @@ test('交易所をより多く建てた人に友好マーカーが移る', () =>
   assert.equal(outpost.friendshipMarker, 1, 'より多く建てたら移る');
 });
 
+// ---- 作業2: 遭遇と名声（仕様8章） ----
+
+test('黒が出たら遭遇が始まり、片付くまで船が動けない', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  let result;
+  for (let i = 0; i < 3000; i++) { g.phase = 'main'; result = E.shakeMothership(g, Math.random); if (result.black) break; }
+  assert.ok(result.black);
+  assert.equal(g.phase, 'encounter');
+  assert.ok(g.encounter && g.encounter.idx === idx);
+  const ship = g.players[idx].ships[0];
+  const anyTarget = [...E.shipReachableStops(g, ship.id).keys()][0] ?? ship.vertexId;
+  assert.equal(E.moveShip(g, ship.id, anyTarget), false); // encounter中は動けない
+  // CPUの答え方（でたらめ）で片付け、必ず終わることも確かめる
+  let guard = 50;
+  while ((g.phase === 'encounter' || g.phase === 'encounterWear') && guard-- > 0) {
+    if (g.phase === 'encounter') CPU.cpuResolveEncounter(g); else CPU.cpuResolveWearOne(g);
+  }
+  assert.equal(g.phase, 'flight');
+});
+
+test('遭遇の戦いは同点なら仕掛けた本人の勝ち', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const before = E.playerScore(g, idx);
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E3'); // 海賊の待ち伏せ: はい→戦い
+  assert.equal(g.encounter.pending.kind, 'yesno');
+  const tieRng = () => 0; // 同じ並べ替えになるので両者の玉がそろう（同点）
+  assert.ok(E.encounterAnswer(g, { yes: true }, tieRng));
+  assert.deepEqual(g.encounterBalls.a, g.encounterBalls.b); // 同点
+  assert.equal(g.phase, 'flight'); // 勝ったのでそのまま終わる
+  assert.equal(E.playerScore(g, idx), before + 1); // 勝ち=名声+1 → 1点増える（0→1点）
+});
+
+test('名声: 2つで1点、失うと下がる（0未満にはならない）', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.fame = 3; const scoreWith3 = E.playerScore(g, idx);
+  p.fame = 2; assert.equal(E.playerScore(g, idx), scoreWith3); // 1つ失って2つでも1点のまま
+  p.fame = 1; assert.equal(E.playerScore(g, idx), scoreWith3 - 1); // さらに失うと点も下がる
+  p.fame = 0;
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E6'); // 遭難船: いいえ→名声1を失う
+  E.encounterAnswer(g, { yes: false });
+  assert.equal(p.fame, 0); // 0未満にはならない
+});
+
+test('宇宙ジャンプで交易船は植民地の場所に跳べない', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const tradeShip = { id: 'jump-trade', kind: 'trade', vertexId: p.ships[0].vertexId, movesLeft: 0 };
+  p.ships.push(tradeShip);
+  const targets = E.spaceJumpTargets(g, 'jump-trade');
+  assert.ok(targets.length > 0);
+  targets.forEach((vid) => { assert.notEqual(g.board.vertices[vid].kind, 'colonySite'); });
+});
+
+test('宇宙港の場所が空いていないと交易船マーカーになり、空いたら置かれる', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const sites = E.freeSpaceportSitesFor(g, idx);
+  assert.ok(sites.length > 0);
+  sites.forEach((vid) => { g.board.vertices[vid].building = { type: 'dummy', owner: idx }; }); // 全部ふさいでしまう
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E8'); // 迷子の交易船: はい→無料の交易船（置けなければマーカー）
+  const shipsBefore = p.ships.length;
+  E.encounterAnswer(g, { yes: true });
+  assert.equal(p.tradeShipMarkers, 1);
+  assert.equal(p.ships.length, shipsBefore); // 置けなかった
+  g.board.vertices[sites[0]].building = null; // 1つ空く
+  E.tryPlaceTradeShipMarkers(g, idx);
+  assert.equal(p.tradeShipMarkers, 0);
+  assert.equal(p.ships.length, shipsBefore + 1); // 空いたら置かれる
+});
+
+test('摩耗（E9）が全員に効く', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  g.players.forEach((p, i) => { p.boosters = i + 1; }); // 人ごとに数をずらしタイなしにする
+  const totalBefore = g.players.reduce((a, p) => a + p.boosters + p.cannons + p.pods, 0);
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E9');
+  let guard = 20;
+  while (g.phase === 'encounterWear' && guard-- > 0) CPU.cpuResolveWearOne(g);
+  const totalAfter = g.players.reduce((a, p) => a + p.boosters + p.cannons + p.pods, 0);
+  assert.equal(totalAfter, totalBefore - 4); // 4人全員が1つずつ失う
+  assert.equal(g.phase, 'flight');
+});
+
+test('摩耗の同数はCPUがブースター→大砲→貨物ポッドの順で手放す', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.boosters = 2; p.cannons = 2; p.pods = 1; // ブースターと大砲が同数で最大
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E9');
+  assert.equal(g.phase, 'encounterWear');
+  const w = g.pendingWear.find((x) => x.player === idx);
+  assert.deepEqual(w.options.slice().sort(), ['booster', 'cannon']);
+  CPU.cpuResolveWearOne(g);
+  assert.equal(p.boosters, 1); // ブースターを先に手放す
+  assert.equal(p.cannons, 2);
+});
+
+test('遭遇の山が尽きたら捨て札を混ぜ直す', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  g.encounterDeck = ['E6']; g.encounterDiscard = ['E2', 'E3'];
+  g.phase = 'main';
+  E.startEncounter(g, idx); // 山の最後の1枚(E6)を引く
+  assert.equal(g.encounterDeck.length, 0);
+  let guard = 20;
+  while ((g.phase === 'encounter' || g.phase === 'encounterWear') && guard-- > 0) {
+    if (g.phase === 'encounter') CPU.cpuResolveEncounter(g); else CPU.cpuResolveWearOne(g);
+  }
+  g.phase = 'main';
+  E.startEncounter(g, idx); // 山が尽きているので、捨て札(E2,E3,E6)を混ぜ直して引く
+  assert.equal(g.encounterDeck.length, 2);
+  assert.equal(g.encounterDiscard.length, 1);
+  assert.ok(g.encounter); // 止まらず次の遭遇が始まる
+});
+
 test('CPU よわい: 4人で数十局が全部止まらず終わる', () => {
   let finished = 0;
   const GAMES = 30;

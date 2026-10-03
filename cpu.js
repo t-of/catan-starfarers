@@ -110,6 +110,33 @@ export function cpuDiscardOne(game, playerIdx) {
 // 7を出した本人（CPU）が盗む相手をでたらめに選ぶ
 export function cpuResolveSteal(game) { return E.resolveSteal(game, pick(E.sevenTargets(game))); }
 
+// 遭遇（CPUよわい）: でたらめに答えるだけ。止まらないことだけ守る
+export function cpuResolveEncounter(game) {
+  const enc = game.encounter;
+  if (game.phase !== 'encounter' || !enc || !enc.pending) return false;
+  const pending = enc.pending;
+  if (pending.kind === 'yesno') return E.encounterAnswer(game, { yes: Math.random() < 0.5 });
+  if (pending.kind === 'amount') return E.encounterAnswer(game, { amount: rnd(pending.max + 1) });
+  if (pending.kind === 'pickShip') { const s = pick(game.players[enc.idx].ships); return s ? E.encounterAnswer(game, { shipId: s.id }) : false; }
+  if (pending.kind === 'jumpTarget') { const t = pick(E.spaceJumpTargets(game, pending.shipId)); return t != null ? E.encounterAnswer(game, { toVertexId: t }) : false; }
+  if (pending.kind === 'pickResource') return E.encounterAnswer(game, { res: pick(E.RESOURCES) });
+  if (pending.kind === 'pickUpgrade') return E.encounterAnswer(game, { kind: pick(['booster', 'cannon', 'pod']) });
+  return false;
+}
+// 摩耗（E9）の同数選択・8枚以上の捨て札を、相手がCPUの分だけ自動で片付ける
+// （貨物ポッド→大砲→ブースターの順で残す＝ブースターから手放す。仕様3.8 E9）
+export function cpuResolveWearOne(game) {
+  if (game.phase !== 'encounterWear') return false;
+  const w = game.pendingWear[0];
+  if (w) {
+    const order = ['booster', 'cannon', 'pod'];
+    return E.resolveWearChoice(game, w.player, order.find((o) => w.options.includes(o)) || w.options[0]);
+  }
+  const d = game.pendingWearDiscards[0];
+  if (d) return E.resolveWearDiscard(game, d.player, pick(E.RESOURCES.filter((r) => game.players[d.player].resources[r] > 0)));
+  return false;
+}
+
 // 交易・建設フェイズをでたらめに打てるだけ打つ（打てる手が無くなったら切り上げる）
 export function cpuPlayMainPhase(game) {
   let guard = 60;
@@ -118,10 +145,20 @@ export function cpuPlayMainPhase(game) {
     if (game.phase === 'gameOver') return;
   }
 }
+// 遭遇・摩耗が片付くまで自動で進める（誰の分でも。止まらないことを守るためのガード付き）
+export function resolveEncountersCpu(game) {
+  let guard = 50;
+  while ((game.phase === 'encounter' || game.phase === 'encounterWear') && guard-- > 0) {
+    if (game.phase === 'encounter') { if (!cpuResolveEncounter(game)) break; }
+    else if (!cpuResolveWearOne(game)) break;
+  }
+}
 // 母船を振り、出た速さぶん船を飛ばす（止まれた場所で建てられるならその場で建てる）
 export function cpuPlayFlight(game, rng = Math.random) {
   if (!E.canFly(game)) return;
   E.shakeMothership(game, rng);
+  resolveEncountersCpu(game);
+  if (game.phase === 'gameOver') return;
   const p = game.players[E.currentPlayer(game)];
   let moveGuard = 20;
   while (moveGuard-- > 0) {

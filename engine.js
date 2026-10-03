@@ -5,7 +5,7 @@
 // 音を鳴らすべきことは game.events に積む。鳴らすかどうかは main.js が決める。
 //
 // 盤・発展カードの作り・交易の形などは ~/GitHub/tof/apps/catan/engine.js から書き方を写した（import はしない）。
-// 遭遇カード・友好カードは作業1ではまだ入れない（仕様 docs/private/specs/catan-starfarers.md の8章）。
+// 遭遇（3.8、自前の20枚）は作業2で入れた。友好カードは作業3まで入れない（仕様 docs/private/specs/catan-starfarers.md の8章）。
 
 export const RESOURCES = ['ore', 'fuel', 'carbon', 'food', 'goods'];
 export const RESOURCE_LABEL = { ore: '鉱石', fuel: '燃料', carbon: '炭素', food: '食料', goods: '商品' };
@@ -56,6 +56,20 @@ const BALLS = ['y', 'y', 'r', 'b', 'k'];
 const BALL_VALUE = { y: 2, r: 3, b: 1, k: 0 };
 const BASE_SPEED_ON_BLACK = 3; // 0.I・3.7: 黒が出たら基本の速さはいつも3
 
+// ---- 3.8: 自前の遭遇20枚（文面は自分で書いた。公式の型だけを借りる） ----
+// kind: 'yesno'（はい/いいえ）・'amount'（0〜maxの数を選ぶ）・'all'（全員が対象。選べない＝摩耗）
+export const ENCOUNTERS = [
+  { id: 'E1', name: '商人の船', count: 3, kind: 'amount', max: 3, prompt: '商人の船と出会った。資源を何枚贈る？' },
+  { id: 'E2', name: '海賊の要求', count: 3, kind: 'yesno', prompt: '海賊が現れ、資源2枚を要求してきた。渡す？' },
+  { id: 'E3', name: '海賊の待ち伏せ', count: 2, kind: 'yesno', prompt: '海賊に待ち伏せされた。戦う？' },
+  { id: 'E4', name: '旅人', count: 2, kind: 'amount', max: 2, prompt: '旅人と出会った。資源を何枚贈る？' },
+  { id: 'E5', name: 'ワームホール', count: 2, kind: 'yesno', prompt: 'ワームホールを見つけた。入る？' },
+  { id: 'E6', name: '遭難船', count: 2, kind: 'yesno', prompt: '遭難した船を見つけた。助ける？' },
+  { id: 'E7', name: '無人の補給基地', count: 2, kind: 'yesno', prompt: '無人の補給基地を見つけた。調べる？' },
+  { id: 'E8', name: '迷子の交易船', count: 2, kind: 'yesno', prompt: '迷子の交易船を見つけた。引き取る？' },
+  { id: 'E9', name: '摩耗', count: 2, kind: 'all', prompt: '母船のあちこちがすり減っている…' },
+];
+
 const HEX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
 function shuffle(arr, rng) {
@@ -65,6 +79,9 @@ function shuffle(arr, rng) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+export function freshEncounterDeck(rng = Math.random) {
+  return shuffle(ENCOUNTERS.flatMap((e) => Array(e.count).fill(e.id)), rng);
 }
 function round3(n) { return Math.round(n * 1000) / 1000; }
 function emptyResources() { return { ore: 0, fuel: 0, carbon: 0, food: 0, goods: 0 }; }
@@ -267,6 +284,7 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
     boosters: 0, cannons: 0, pods: 0,
     fame: 0,
     tokens: [], // 片付けた海賊・氷 { kind, strength }
+    tradeShipMarkers: 0, // 遭遇でもらったのに置けなかった交易船（3.8 E8。空いたら置く）
   }));
 
   const firstPlayer = Math.floor(rng() * playerCount);
@@ -283,12 +301,16 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
     playerCount, players, board,
     bank, reserve, reserveDiscs: shuffle(RESERVE_DISC_POOL, rng),
     bonusPool: { booster: 2, cannon: 1, pod: 1 },
-    phase: 'setupColony', // setupColony → setupPort → roll → discard → steal → main → flight → gameOver
+    // setupColony → setupPort → roll → discard → steal → main → flight → encounter → encounterWear → gameOver
+    phase: 'setupColony',
     firstPlayer,
     setupSequence, setupPos: 0,
     turn: firstPlayer, turnNumber: 1,
     ballsShown: null, speed: 0,
     pendingDiscards: [], // [{ player, count }]
+    encounterDeck: freshEncounterDeck(rng), encounterDiscard: [], encounter: null, encounterBalls: null,
+    frozenShipId: null,
+    pendingWear: [], pendingWearDiscards: [], // 摩耗（E9）: 同数で本人が選ぶ／8枚以上で1枚捨てる
     nextShipSeq: 0,
     winner: null,
     events: [], log: [],
@@ -416,6 +438,30 @@ export function spaceportSitesFor(game, colonyVertexId) {
   const v = game.board.vertices[colonyVertexId];
   if (!v) return [];
   return v.neighbors.filter((n) => game.board.vertices[n].kind !== 'systemCenter');
+}
+// 自分の宇宙港のまわりで、今すぐ船を置ける（空いている）場所（main.js・遭遇の無料交易船・交易船マーカーで使う）
+export function freeSpaceportSitesFor(game, idx) {
+  const p = game.players[idx];
+  const seen = new Set();
+  p.spaceports.forEach((v) => spaceportSitesFor(game, v).forEach((s) => seen.add(s)));
+  return [...seen].filter((vid) => {
+    const v = game.board.vertices[vid];
+    return v.kind === 'spaceportSite' && v.spaceportOwner === idx && !v.building && !v.shipHere;
+  });
+}
+// 交易船マーカー（3.8 E8）を、宇宙港の場所が空き次第、無料の交易船として置く
+export function tryPlaceTradeShipMarkers(game, idx) {
+  const p = game.players[idx];
+  while ((p.tradeShipMarkers || 0) > 0 && p.shipsAvailable > 0 && p.ships.length < MAX_SHIPS_DEPLOYED) {
+    const site = freeSpaceportSitesFor(game, idx)[0];
+    if (site == null) break;
+    const shipId = `${idx}-${game.nextShipSeq++}`;
+    p.ships.push({ id: shipId, kind: 'trade', vertexId: site, movesLeft: 0 });
+    p.shipsAvailable--; p.tradeShipMarkers--;
+    game.board.vertices[site].shipHere = { owner: idx, shipId };
+    log(game, `${playerName(game, idx)} の交易船マーカーが宇宙港の場所に置かれた`);
+    fire(game, 'build');
+  }
 }
 export function setupDoPortRound(game, { colonyVertexId, siteVertexId, shipKind, bonusKind }) {
   if (game.phase !== 'setupPort') return false;
@@ -642,6 +688,7 @@ export function buildSpaceport(game, colonyVertexId) {
     if (sv.spaceportOwner == null) { sv.spaceportOwner = idx; if (sv.kind === 'plain') sv.kind = 'spaceportSite'; }
   });
   fire(game, 'build');
+  tryPlaceTradeShipMarkers(game, idx);
   checkWin(game, idx);
   return true;
 }
@@ -735,19 +782,28 @@ export function canFly(game) {
   if (game.phase !== 'main') return false;
   return game.players[currentPlayer(game)].ships.length > 0;
 }
+export function speedFromPicks(picks, boosters) {
+  const black = picks.includes('k');
+  const base = black ? BASE_SPEED_ON_BLACK : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
+  return base + boosters;
+}
+export function combatFromPicks(picks, cannons) {
+  const base = picks.includes('k') ? 0 : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
+  return base + cannons;
+}
 export function shakeMothership(game, rng = Math.random) {
   if (game.phase !== 'main') return null;
   const idx = currentPlayer(game); const p = game.players[idx];
   if (p.ships.length === 0) return null;
   const picks = shuffle(BALLS, rng).slice(0, 2);
   const black = picks.includes('k');
-  const base = black ? BASE_SPEED_ON_BLACK : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
-  const speed = base + p.boosters;
+  const speed = speedFromPicks(picks, p.boosters);
   game.ballsShown = picks; game.speed = speed;
   p.ships.forEach((s) => { s.movesLeft = speed; });
-  game.phase = 'flight';
   fire(game, 'shake');
-  log(game, `母船: ${picks.join(',')} → 速さ ${speed}${black ? '（黒。遭遇は次の版で入れる）' : ''}`);
+  log(game, `母船: ${picks.join(',')} → 速さ ${speed}${black ? '（黒。遭遇が起きる）' : ''}`);
+  if (black) startEncounter(game, idx);
+  else game.phase = 'flight';
   return { picks, speed, black };
 }
 function onShipArrive(game, idx, vertexId) {
@@ -835,11 +891,295 @@ export function moveShip(game, shipId, toVertexId) {
   ship.movesLeft -= steps;
   vs[toVertexId].shipHere = { owner: player.idx, shipId };
   fire(game, 'move');
+  tryPlaceTradeShipMarkers(game, player.idx); // 出発した場所が空いた分、マーカーを置けるかもしれない
   return true;
 }
+
+// ================================================================
+// 遭遇（3.8）。黒が出たら始まり、片付くまで game.phase は 'encounter'（摩耗だけ 'encounterWear'）のままで、
+// その間 moveShip は phase チェックで弾かれる（動けない）。
+// game.encounter = { cardId, idx(手番の人), rightIdx(右隣), pending } を main.js が見て画面を出す。
+// pending.kind: 'yesno' | 'amount'（max） | 'pickShip'（purpose:'freeze'|'jump'） | 'jumpTarget'（shipId）
+//             | 'pickResource'（count） | 'pickUpgrade'
+// ================================================================
+function drawEncounterCard(game) {
+  if (!game.encounterDeck.length) {
+    game.encounterDeck = shuffle(game.encounterDiscard, Math.random);
+    game.encounterDiscard = [];
+  }
+  return game.encounterDeck.pop();
+}
+function gainFame(p, n) { p.fame += n; }
+function loseFame(p, n) { p.fame = Math.max(0, p.fame - n); }
+function loseRandomUpgrade(p, rng = Math.random) {
+  const types = ['boosters', 'cannons', 'pods'].filter((k) => p[k] > 0);
+  if (!types.length) return;
+  p[types[Math.floor(rng() * types.length)]]--;
+}
+function takeResourcesToBank(game, p, n) {
+  let left = n;
+  RESOURCES.slice().sort((a, b) => p.resources[b] - p.resources[a]).forEach((r) => {
+    while (left > 0 && p.resources[r] > 0) { p.resources[r]--; game.bank[r]++; left--; }
+  });
+}
+function stealOneFromEachOpponent(game, idx, rng = Math.random) {
+  game.players.forEach((op) => {
+    if (op.idx === idx) return;
+    const pool = RESOURCES.flatMap((r) => Array(op.resources[r]).fill(r));
+    if (!pool.length) return;
+    const picked = pool[Math.floor(rng() * pool.length)];
+    op.resources[picked]--; game.players[idx].resources[picked]++;
+  });
+}
+function grantFreeTradeShip(game, idx) {
+  const p = game.players[idx];
+  const site = freeSpaceportSitesFor(game, idx)[0];
+  if (site != null && p.shipsAvailable > 0 && p.ships.length < MAX_SHIPS_DEPLOYED) {
+    const shipId = `${idx}-${game.nextShipSeq++}`;
+    p.ships.push({ id: shipId, kind: 'trade', vertexId: site, movesLeft: 0 });
+    p.shipsAvailable--;
+    game.board.vertices[site].shipHere = { owner: idx, shipId };
+    fire(game, 'build');
+  } else {
+    p.tradeShipMarkers = (p.tradeShipMarkers || 0) + 1;
+  }
+}
+function freezeShip(game, shipId) {
+  const found = findShip(game, shipId);
+  if (!found) return;
+  found.ship.movesLeft = 0;
+  game.frozenShipId = shipId;
+  log(game, `${playerName(game, found.player.idx)} の船が動けなくなった`);
+  fire(game, 'freeze');
+}
+function shipPickOrAuto(game, enc) {
+  const p = game.players[enc.idx];
+  if (p.ships.length <= 1) {
+    if (p.ships[0]) freezeShip(game, p.ships[0].id);
+    finishEncounter(game);
+  } else {
+    enc.pending = { kind: 'pickShip', purpose: 'freeze' };
+  }
+}
+function jumpPickOrAuto(game, enc) {
+  const p = game.players[enc.idx];
+  if (p.ships.length <= 1) {
+    enc.pending = { kind: 'jumpTarget', shipId: p.ships[0] ? p.ships[0].id : null };
+  } else {
+    enc.pending = { kind: 'pickShip', purpose: 'jump' };
+  }
+}
+function doFight(game, enc, rng = Math.random) {
+  const a = game.players[enc.idx], b = game.players[enc.rightIdx];
+  const pa = shuffle(BALLS, rng).slice(0, 2), pb = shuffle(BALLS, rng).slice(0, 2);
+  const ca = combatFromPicks(pa, a.cannons), cb = combatFromPicks(pb, b.cannons);
+  game.encounterBalls = { a: pa, b: pb, aIdx: enc.idx, bIdx: enc.rightIdx };
+  const win = ca >= cb; // 公式どおり同点は仕掛けた本人の勝ち
+  log(game, `戦い: ${playerName(game, enc.idx)}(${ca}) 対 ${playerName(game, enc.rightIdx)}(${cb}) → ${win ? '勝ち' : '負け'}`);
+  fire(game, win ? 'encWin' : 'encLose');
+  return { win };
+}
+function doSpeedCompare(game, enc, rng = Math.random) {
+  const a = game.players[enc.idx], b = game.players[enc.rightIdx];
+  const pa = shuffle(BALLS, rng).slice(0, 2), pb = shuffle(BALLS, rng).slice(0, 2);
+  const sa = speedFromPicks(pa, a.boosters), sb = speedFromPicks(pb, b.boosters);
+  game.encounterBalls = { a: pa, b: pb, aIdx: enc.idx, bIdx: enc.rightIdx };
+  const win = sa >= sb; // 相手が大きければ負け（同じなら負けない）
+  log(game, `速さ比べ: ${playerName(game, enc.idx)}(${sa}) 対 ${playerName(game, enc.rightIdx)}(${sb}) → ${win ? '勝ち' : '負け'}`);
+  fire(game, win ? 'encWin' : 'encLose');
+  return { win };
+}
+function finishEncounter(game) {
+  const idx = game.encounter ? game.encounter.idx : game.turn;
+  game.encounter = null;
+  game.phase = 'flight';
+  checkWin(game, idx); // 名声やアップグレードが結果に絡む（3.10: 手番の人の操作のあと）
+}
+export function startEncounter(game, idx, cardIdOverride) {
+  const cardId = cardIdOverride || drawEncounterCard(game);
+  if (!cardIdOverride) game.encounterDiscard.push(cardId);
+  const def = ENCOUNTERS.find((e) => e.id === cardId);
+  const rightIdx = (idx - 1 + game.playerCount) % game.playerCount; // 3.8: 右隣に統一
+  game.phase = 'encounter';
+  game.encounter = { cardId, idx, rightIdx, pending: null };
+  log(game, `遭遇: ${def.name}`);
+  fire(game, 'encounter');
+  if (cardId === 'E9') { applyWearToAll(game); return; }
+  game.encounter.pending = def.kind === 'amount' ? { kind: 'amount', max: def.max } : { kind: 'yesno' };
+}
+function loseUpgrade(p, kind) { p[kind === 'booster' ? 'boosters' : kind === 'cannon' ? 'cannons' : 'pods']--; }
+function applyWearToAll(game) {
+  game.pendingWear = [];
+  game.players.forEach((p) => {
+    const counts = { booster: p.boosters, cannon: p.cannons, pod: p.pods };
+    const maxN = Math.max(...Object.values(counts));
+    if (maxN === 0) return;
+    const tied = Object.entries(counts).filter(([, n]) => n === maxN).map(([k]) => k);
+    if (tied.length === 1) loseUpgrade(p, tied[0]);
+    else game.pendingWear.push({ player: p.idx, options: tied });
+  });
+  log(game, '摩耗: アップグレードが1つずつ減った');
+  if (game.pendingWear.length) game.phase = 'encounterWear';
+  else finishWearDiscards(game);
+}
+function finishWearDiscards(game) {
+  game.pendingWearDiscards = game.players.filter((p) => sumRes(p.resources) >= 8).map((p) => ({ player: p.idx }));
+  if (game.pendingWearDiscards.length) game.phase = 'encounterWear';
+  else finishEncounter(game);
+}
+export function resolveWearChoice(game, playerIdx, kind) {
+  if (game.phase !== 'encounterWear') return false;
+  const entry = game.pendingWear.find((w) => w.player === playerIdx);
+  if (!entry || !entry.options.includes(kind)) return false;
+  loseUpgrade(game.players[playerIdx], kind);
+  game.pendingWear = game.pendingWear.filter((w) => w.player !== playerIdx);
+  if (!game.pendingWear.length) finishWearDiscards(game);
+  return true;
+}
+export function resolveWearDiscard(game, playerIdx, res) {
+  if (game.phase !== 'encounterWear') return false;
+  const entry = game.pendingWearDiscards.find((d) => d.player === playerIdx);
+  if (!entry || !(game.players[playerIdx].resources[res] > 0)) return false;
+  game.players[playerIdx].resources[res]--; game.bank[res]++;
+  game.pendingWearDiscards = game.pendingWearDiscards.filter((d) => d.player !== playerIdx);
+  if (!game.pendingWearDiscards.length) finishEncounter(game);
+  return true;
+}
+export function spaceJumpTargets(game, shipId) {
+  const found = findShip(game, shipId);
+  if (!found) return [];
+  const { player, ship } = found;
+  return game.board.vertices.filter((v) => canStopAt(game, player.idx, ship.kind, v.id)).map((v) => v.id);
+}
+function answerYesNo(game, enc, yes, rng) {
+  const p = game.players[enc.idx];
+  switch (enc.cardId) {
+    case 'E2':
+      if (yes) { takeResourcesToBank(game, p, 2); finishEncounter(game); }
+      else {
+        const r = doFight(game, enc, rng);
+        if (r.win) { gainFame(p, 1); finishEncounter(game); }
+        else { loseRandomUpgrade(p, rng); shipPickOrAuto(game, enc); }
+      }
+      return true;
+    case 'E3':
+      if (yes) {
+        const r = doFight(game, enc, rng);
+        if (r.win) { stealOneFromEachOpponent(game, enc.idx, rng); gainFame(p, 1); finishEncounter(game); }
+        else { loseFame(p, 1); loseRandomUpgrade(p, rng); finishEncounter(game); }
+      } else {
+        const r = doSpeedCompare(game, enc, rng);
+        if (r.win) finishEncounter(game);
+        else shipPickOrAuto(game, enc);
+      }
+      return true;
+    case 'E5':
+      if (yes) {
+        const r = doSpeedCompare(game, enc, rng);
+        if (r.win) jumpPickOrAuto(game, enc);
+        else shipPickOrAuto(game, enc);
+      } else finishEncounter(game);
+      return true;
+    case 'E6':
+      if (yes) {
+        if (sumRes(p.resources) > 0) { takeResourcesToBank(game, p, 1); gainFame(p, 2); }
+        else gainFame(p, 1);
+      } else loseFame(p, 1);
+      finishEncounter(game);
+      return true;
+    case 'E7':
+      if (yes) {
+        const picks = shuffle(BALLS, rng).slice(0, 2);
+        game.encounterBalls = { a: picks, b: null, aIdx: enc.idx, bIdx: null };
+        const combat = combatFromPicks(picks, p.cannons);
+        if (combat >= 4) enc.pending = { kind: 'pickUpgrade' };
+        else shipPickOrAuto(game, enc);
+      } else finishEncounter(game);
+      return true;
+    case 'E8':
+      if (yes) grantFreeTradeShip(game, enc.idx); else gainFame(p, 1);
+      finishEncounter(game);
+      return true;
+    default: return false;
+  }
+}
+function answerAmount(game, enc, amount, rng) {
+  const p = game.players[enc.idx];
+  const def = ENCOUNTERS.find((e) => e.id === enc.cardId);
+  if (!(amount >= 0 && amount <= def.max)) return false;
+  if (enc.cardId === 'E1') {
+    if (amount === 0) { shipPickOrAuto(game, enc); return true; }
+    takeResourcesToBank(game, p, amount);
+    if (amount === 2) gainFame(p, 1);
+    enc.pending = { kind: 'pickResource', count: amount === 1 ? 1 : amount === 2 ? 3 : 2 };
+    return true;
+  }
+  if (enc.cardId === 'E4') {
+    if (amount > 0) takeResourcesToBank(game, p, amount);
+    if (amount === 0) { finishEncounter(game); return true; }
+    if (amount === 2) gainFame(p, 1);
+    jumpPickOrAuto(game, enc);
+    return true;
+  }
+  return false;
+}
+function answerPickShip(game, enc, shipId) {
+  if (!game.players[enc.idx].ships.some((s) => s.id === shipId)) return false;
+  if (enc.pending.purpose === 'freeze') { freezeShip(game, shipId); finishEncounter(game); }
+  else { enc.pending = { kind: 'jumpTarget', shipId }; }
+  return true;
+}
+function answerJumpTarget(game, enc, toVertexId) {
+  const shipId = enc.pending.shipId;
+  const found = findShip(game, shipId);
+  if (!found) { finishEncounter(game); return true; }
+  const { player, ship } = found;
+  if (!canStopAt(game, player.idx, ship.kind, toVertexId)) return false;
+  game.board.vertices[ship.vertexId].shipHere = null;
+  ship.vertexId = toVertexId;
+  onShipArrive(game, player.idx, toVertexId);
+  game.board.vertices[toVertexId].shipHere = { owner: player.idx, shipId };
+  fire(game, 'jump');
+  finishEncounter(game);
+  return true;
+}
+function answerPickResource(game, enc, res) {
+  if (!RESOURCES.includes(res)) return false;
+  const p = game.players[enc.idx];
+  const count = enc.pending.count;
+  const n = Math.min(count, game.bank[res]);
+  p.resources[res] += n; game.bank[res] -= n;
+  finishEncounter(game);
+  return true;
+}
+function answerPickUpgrade(game, enc, kind) {
+  const p = game.players[enc.idx];
+  const caps = { booster: MAX_BOOSTERS, cannon: MAX_CANNONS, pod: MAX_PODS };
+  const key = kind === 'booster' ? 'boosters' : kind === 'cannon' ? 'cannons' : kind === 'pod' ? 'pods' : null;
+  if (!key) return false;
+  if (p[key] < caps[kind]) p[key]++;
+  fire(game, 'build');
+  finishEncounter(game);
+  return true;
+}
+export function encounterAnswer(game, payload, rng = Math.random) {
+  if (game.phase !== 'encounter' || !game.encounter || !game.encounter.pending) return false;
+  const enc = game.encounter;
+  switch (enc.pending.kind) {
+    case 'yesno': return answerYesNo(game, enc, !!payload.yes, rng);
+    case 'amount': return answerAmount(game, enc, Number(payload.amount), rng);
+    case 'pickShip': return answerPickShip(game, enc, payload.shipId);
+    case 'jumpTarget': return answerJumpTarget(game, enc, payload.toVertexId);
+    case 'pickResource': return answerPickResource(game, enc, payload.res);
+    case 'pickUpgrade': return answerPickUpgrade(game, enc, payload.kind);
+    default: return false;
+  }
+}
+
 export function endTurn(game) {
   if (game.phase !== 'main' && game.phase !== 'flight') return false;
   game.ballsShown = null; game.speed = 0;
+  game.encounterBalls = null; game.frozenShipId = null;
   game.turn = (game.turn + 1) % game.playerCount;
   game.turnNumber++;
   game.phase = 'roll';
