@@ -603,3 +603,52 @@ test('CPU よわい: 4人で数十局が全部止まらず終わる', () => {
   }
   assert.equal(finished, GAMES);
 });
+
+test('相手との交易: 手番の人とだけ、持っていない資源は出せない・受けられない、両者の手札が正しく入れ替わる', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  g.phase = 'main';
+  const idx = E.currentPlayer(g);
+  const other = (idx + 1) % 4;
+  const third = (idx + 2) % 4;
+  const a = g.players[idx], b = g.players[other];
+  E.RESOURCES.forEach((r) => { a.resources[r] = 0; b.resources[r] = 0; });
+  a.resources.ore = 2; b.resources.fuel = 1;
+
+  // 出す側が持っていない資源は出せない
+  assert.equal(E.playerTrade(g, other, { carbon: 1 }, {}), false);
+  // 受ける側が持っていない資源は要求できない
+  assert.equal(E.playerTrade(g, other, {}, { carbon: 1 }), false);
+  // 自分自身とは交易できない
+  assert.equal(E.playerTrade(g, idx, { ore: 1 }, {}), false);
+  // 範囲外のotherIdxは交易できない
+  assert.equal(E.playerTrade(g, 99, { ore: 1 }, {}), false);
+  // third（手番でも相手でもない人）の手持ちは変わらない
+  const thirdBefore = { ...g.players[third].resources };
+
+  assert.equal(E.playerTrade(g, other, { ore: 1 }, { fuel: 1 }), true);
+  assert.equal(a.resources.ore, 1);
+  assert.equal(a.resources.fuel, 1);
+  assert.equal(b.resources.ore, 1);
+  assert.equal(b.resources.fuel, 0);
+  assert.deepEqual(g.players[third].resources, thirdBefore);
+});
+
+test('CPUの交易の答えは必ず合法（持っていない物を出さない）', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  g.phase = 'main';
+  const idx = E.currentPlayer(g);
+  const other = (idx + 1) % 4;
+  const b = g.players[other];
+  E.RESOURCES.forEach((r) => { b.resources[r] = 0; });
+  b.resources.fuel = 1;
+  // 持っている分の要求は合法範囲内で受けうる
+  for (let i = 0; i < 20; i++) {
+    assert.equal(typeof CPU.acceptTrade(g, other, { ore: 1 }, { fuel: 1 }), 'boolean');
+  }
+  // 持っていない物を求める交換は、受けると答えてはいけない（合法に答える＝断る）
+  for (let i = 0; i < 20; i++) {
+    assert.equal(CPU.acceptTrade(g, other, { ore: 1 }, { carbon: 1 }), false);
+  }
+});

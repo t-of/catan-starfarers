@@ -744,10 +744,11 @@ export function helpingHandSteal(game, targets, rng = Math.random) {
   fire(game, 'trade');
   return true;
 }
+// 相手との交易（5章: 逆提案なし。手番の人が出し、相手が受けるか断るかだけ）
 export function playerTrade(game, otherIdx, give, get) {
   if (game.phase !== 'main') return false;
   const idx = currentPlayer(game);
-  if (idx === otherIdx) return false;
+  if (idx === otherIdx || otherIdx < 0 || otherIdx >= game.playerCount) return false; // 手番でない人どうしは交易できない
   const a = game.players[idx], b = game.players[otherIdx];
   if (!canAfford(a.resources, give) || !canAfford(b.resources, get)) return false;
   payCost(a.resources, give); payCost(b.resources, get);

@@ -578,17 +578,53 @@ function renderBankTradePanel() {
   const p = game.players[idx];
   const d = ui.data;
   const rate = (r) => (r === 'goods' ? 2 : 3);
+  const others = game.players.map((_, i) => i).filter((i) => i !== idx);
+  if (d.other == null) d.other = others[0];
+  const other = game.players[d.other];
+  const pGive = d.pGive || (d.pGive = E.RESOURCES.reduce((o, r) => ({ ...o, [r]: 0 }), {}));
+  const pGet = d.pGet || (d.pGet = E.RESOURCES.reduce((o, r) => ({ ...o, [r]: 0 }), {}));
   els.panel.innerHTML = `<h2>銀行と交易</h2>
     <p>渡す（レートどおりの枚数）</p>
     <div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="give" data-r="${r}" class="${d.give === r ? 'is-selected' : ''}" ${p.resources[r] < rate(r) ? 'disabled' : ''}>${E.RESOURCE_LABEL[r]} ×${rate(r)}</button>`).join('')}</div>
     <p>もらう</p>
     <div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="want" data-r="${r}" class="${d.want === r ? 'is-selected' : ''}" ${game.bank[r] <= 0 || r === d.give ? 'disabled' : ''}>${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>
     <button class="btn btn--accent" data-act="confirm" ${d.give && d.want ? '' : 'disabled'}>交易する</button>
+    <hr style="border-color:rgba(255,255,255,0.15)">
+    <h2>相手と交易</h2>
+    <div class="sheet__row"><span>相手</span><div class="res-pick">${others.map((i) => `<button data-act="other" data-i="${i}" class="${d.other === i ? 'is-selected' : ''}">${escapeHtml(E.playerName(game, i))}</button>`).join('')}</div></div>
+    <p>渡す</p>
+    ${E.RESOURCES.map((r) => `<div class="sheet__row"><span>${E.RESOURCE_LABEL[r]}（持ち${p.resources[r]}）</span>
+        <span class="stepper"><button data-act="pgdec" data-r="${r}">−</button><b>${pGive[r]}</b><button data-act="pginc" data-r="${r}">＋</button></span></div>`).join('')}
+    <p>もらう（相手の手持ちまで）</p>
+    ${E.RESOURCES.map((r) => `<div class="sheet__row"><span>${E.RESOURCE_LABEL[r]}（相手${other.resources[r]}）</span>
+        <span class="stepper"><button data-act="pwdec" data-r="${r}">−</button><b>${pGet[r]}</b><button data-act="pwinc" data-r="${r}">＋</button></span></div>`).join('')}
+    <button class="btn btn--accent" data-act="playerTrade" ${E.RESOURCES.some((r) => pGive[r] > 0 || pGet[r] > 0) ? '' : 'disabled'}>この内容で成立させる</button>
     <button class="ghost-btn" data-act="cancel">やめる</button>`;
   bindPanel({
     give: (b) => { d.give = b.dataset.r; if (d.want === d.give) d.want = null; renderAll(); },
     want: (b) => { d.want = b.dataset.r; renderAll(); },
     confirm: () => { E.bankTrade(game, d.give, d.want); ui.mode = 'bankTrade'; ui.data = { give: null, want: null }; persistAndRender(); },
+    other: (b) => { d.other = Number(b.dataset.i); renderAll(); },
+    pginc: (b) => { const r = b.dataset.r; if (pGive[r] < p.resources[r]) { pGive[r]++; renderAll(); } },
+    pgdec: (b) => { const r = b.dataset.r; if (pGive[r] > 0) { pGive[r]--; renderAll(); } },
+    pwinc: (b) => { const r = b.dataset.r; if (pGet[r] < other.resources[r]) { pGet[r]++; renderAll(); } },
+    pwdec: (b) => { const r = b.dataset.r; if (pGet[r] > 0) { pGet[r]--; renderAll(); } },
+    playerTrade: () => {
+      const otherIdx = d.other;
+      if (isCpuSeat(otherIdx)) {
+        // CPUが相手のときは、成立させる前に受けるか断るかを決める（人の手札は見ず、今回の内容だけで判断）
+        if (CPU.acceptTrade(game, otherIdx, pGive, pGet)) {
+          E.playerTrade(game, otherIdx, pGive, pGet);
+          game.log.push(`${E.playerName(game, otherIdx)}が交易を受けました`);
+        } else {
+          game.log.push(`${E.playerName(game, otherIdx)}は交易を断りました`);
+        }
+      } else {
+        E.playerTrade(game, otherIdx, pGive, pGet);
+      }
+      d.pGive = null; d.pGet = null;
+      persistAndRender();
+    },
     cancel: () => { ui.mode = 'idle'; ui.data = {}; renderAll(); },
   });
 }

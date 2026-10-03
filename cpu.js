@@ -159,6 +159,13 @@ export function cpuResolveWearOne(game) {
   return false;
 }
 
+// 相手との交易（3b）に答える: 持っていない資源は出せない。よわいは合法ならでたらめに受ける・断る
+export function acceptTrade(game, cpuIdx, give, get) {
+  const p = game.players[cpuIdx];
+  if (!E.RESOURCES.every((r) => (p.resources[r] || 0) >= (get[r] || 0))) return false;
+  return Math.random() < 0.5;
+}
+
 // 交易・建設フェイズをでたらめに打てるだけ打つ（打てる手が無くなったら切り上げる）
 export function cpuPlayMainPhase(game) {
   let guard = 60;
