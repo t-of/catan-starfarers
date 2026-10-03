@@ -67,7 +67,8 @@ function playEvents() {
   game.events = [];
 }
 const soundBtn = document.getElementById('soundBtn');
-function syncSoundBtn() { soundBtn.textContent = soundOn ? '音 オン' : '音 オフ'; soundBtn.setAttribute('aria-pressed', String(soundOn)); }
+// アイコンは差し替えない（デザイン案のスピーカー svg のまま）。aria-pressed で薄く見せて on/off を示す
+function syncSoundBtn() { soundBtn.setAttribute('aria-pressed', String(soundOn)); soundBtn.setAttribute('aria-label', soundOn ? '音 オン' : '音 オフ'); }
 soundBtn.addEventListener('click', () => { soundOn = !soundOn; save('soundOn', soundOn); setAudioSession(soundOn); syncSoundBtn(); });
 syncSoundBtn();
 
@@ -82,6 +83,8 @@ const els = {
   continueBtn: document.getElementById('continueBtn'),
   turnNum: document.getElementById('turnNum'),
   playersBar: document.getElementById('playersBar'),
+  phaseSteps: document.getElementById('phaseSteps'),
+  phaseDice: document.getElementById('phaseDice'),
   bankPanel: document.getElementById('bankPanel'),
   logPanel: document.getElementById('logPanel'),
   board: document.getElementById('board'),
@@ -92,6 +95,10 @@ const els = {
   upgradeBar: document.getElementById('upgradeBar'),
   friendBar: document.getElementById('friendBar'),
   buildGrid: document.getElementById('buildGrid'),
+  buildsDialog: document.getElementById('buildsDialog'),
+  buildsBtn: document.getElementById('buildsBtn'),
+  logDialog: document.getElementById('logDialog'),
+  logBtn: document.getElementById('logBtn'),
   actionBar: document.getElementById('actionBar'),
   diceBtn: document.getElementById('diceBtn'),
   tradeBtn: document.getElementById('tradeBtn'),
@@ -100,6 +107,11 @@ const els = {
   panelOverlay: document.getElementById('panelOverlay'),
   panel: document.getElementById('panel'),
 };
+// 「建てる・交易」「銀行・ログ」は常時表示のリストではなく、ネイティブの dialog で開く（デザイン案は盤の下をすっきりさせているため）
+els.buildsBtn.addEventListener('click', () => els.buildsDialog.showModal());
+document.getElementById('buildsCloseBtn').addEventListener('click', () => els.buildsDialog.close());
+els.logBtn.addEventListener('click', () => els.logDialog.showModal());
+document.getElementById('logCloseBtn').addEventListener('click', () => els.logDialog.close());
 
 // ---- 席の設定 ----
 function defaultSeat(i) { return { type: i === 0 ? 'human' : 'cpu', level: 'normal', name: '' }; }
@@ -359,16 +371,31 @@ function renderPlayers() {
     const card = document.createElement('div');
     card.className = `player-card${i === idx ? ' is-turn' : ''}`;
     if (i === idx) card.style.borderColor = I.PLAYER_COLORS[i];
+    // 得点チップ（デザイン案 Main.dc.html）: 色の点・名前・得点 /15 の2行。内訳は title（長押し・ホバー）で見られる
+    card.title = `植民地${p.colonies.length}・宇宙港${p.spaceports.length}・交易所${p.tradeStations.length}・名声${p.fame}`;
     const dot = document.createElement('span'); dot.className = 'player-card__dot'; dot.style.background = I.PLAYER_COLORS[i];
     const body = document.createElement('div'); body.className = 'player-card__body';
-    const name = document.createElement('div'); name.className = 'player-card__name'; name.textContent = E.playerName(game, i) + (isCpuSeat(i) ? '（CPU）' : '');
-    const sub = document.createElement('div'); sub.className = 'player-card__sub';
-    sub.textContent = `植民地${p.colonies.length}・宇宙港${p.spaceports.length}・交易所${p.tradeStations.length}・名声${p.fame}`;
-    body.append(name, sub);
-    const vp = document.createElement('div'); vp.className = 'player-card__vp'; vp.textContent = E.playerScore(game, i);
-    card.append(dot, body, vp);
+    const name = document.createElement('span'); name.className = 'player-card__name'; name.textContent = E.playerName(game, i) + (isCpuSeat(i) ? '（CPU）' : '');
+    body.append(dot, name);
+    const vp = document.createElement('div'); vp.className = 'player-card__vp';
+    vp.innerHTML = `${E.playerScore(game, i)}<span class="player-card__max"> /${E.WIN_SCORE}</span>`;
+    card.append(body, vp);
     els.playersBar.appendChild(card);
   });
+}
+// 手番の段階（デザイン案 Main.dc.html の 1 サイコロ / 2 交易・建設 / 3 飛行）
+function phaseStepOf(phase) {
+  if (phase === 'roll' || phase === 'discard' || phase === 'steal' || phase === 'galacticFund') return 'roll';
+  if (phase === 'main') return 'main';
+  if (phase === 'flight' || phase === 'encounter' || phase === 'encounterWear' || phase === 'friendship') return 'flight';
+  return null;
+}
+function renderPhaseSteps() {
+  const step = phaseStepOf(game.phase);
+  els.phaseSteps.hidden = !step;
+  if (!step) return;
+  els.phaseDice.textContent = game.phase === 'roll' || !game.diceLast ? '' : String(game.diceLast[0] + game.diceLast[1]);
+  els.phaseSteps.querySelectorAll('.phase-steps__item').forEach((el) => el.classList.toggle('is-current', el.dataset.phase === step));
 }
 function renderBank() {
   els.bankPanel.innerHTML = `<div class="panel__head"><span>銀行</span><span>予備の山 残り${game.reserve.length}</span></div>
@@ -379,15 +406,26 @@ function renderLog() {
 }
 function escapeHtml(s) { return String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// 資源アイコン（デザイン案 Main.dc.html の手札カード）
+const RESOURCE_ICON = {
+  ore: { stroke: '#c4cddc', d: 'M8 1.5 L13 6 L8 14.5 L3 6 Z M3 6 H13' },
+  fuel: { stroke: '#ff9a5c', d: 'M8 1.5 C11 5.5 13 8 13 10.2 A5 5 0 0 1 3 10.2 C3 8 5 5.5 8 1.5 Z' },
+  carbon: { stroke: '#9fb0a5', d: 'M8 1.5 L13.6 4.75 V11.25 L8 14.5 L2.4 11.25 V4.75 Z M8 5 L10.6 6.5 V9.5 L8 11 L5.4 9.5 V6.5 Z' },
+  food: { stroke: '#6fe095', d: 'M3 13 C3 6 7 2.5 13.5 2.5 C13.5 9 10 13 3 13 Z M3 13 L9 7', cap: true },
+  goods: { stroke: '#c3a3ff', d: 'M2.5 5 L8 2 L13.5 5 V11 L8 14 L2.5 11 Z M2.5 5 L8 8 L13.5 5 M8 8 V14' },
+};
+function resourceIconSvg(r) {
+  const ic = RESOURCE_ICON[r];
+  return `<svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="${ic.stroke}" stroke-width="1.5" stroke-linejoin="round"${ic.cap ? ' stroke-linecap="round"' : ''}><path d="${ic.d}"></path></svg>`;
+}
 function renderHand() {
   const idx = E.currentPlayer(game);
   const p = game.players[idx];
   els.handCount.textContent = E.RESOURCES.reduce((a, r) => a + p.resources[r], 0) + '枚';
-  els.handBar.innerHTML = E.RESOURCES.map((r) => `<div class="hand__res"><b>${p.resources[r]}</b>${E.RESOURCE_LABEL[r]}</div>`).join('');
+  els.handBar.innerHTML = E.RESOURCES.map((r) => `<div class="hand__res">${resourceIconSvg(r)}<b>${p.resources[r]}</b><span>${E.RESOURCE_LABEL[r]}</span></div>`).join('');
   els.upgradeBar.innerHTML = `
-    <span><b>${p.boosters}</b>ブースター（速さ+${p.boosters}）</span>
-    <span><b>${p.cannons}</b>大砲（戦闘力+${p.cannons}）</span>
-    <span><b>${p.pods}</b>貨物ポッド</span>`;
+    <span>ブースター ${p.boosters}・大砲 ${p.cannons}・貨物ポッド ${p.pods}</span>
+    <span>友好 ${p.friendCards.length}・名声 ${p.fame}・予備 残り${game.reserve.length}</span>`;
   renderFriendCards(p);
 }
 // 3.9: もっている友好カードと効き目を小さな札で見せる
@@ -502,10 +540,11 @@ function renderEncounterBallsHtml() {
 function updateActionBar() {
   const idx = E.currentPlayer(game);
   const humanTurn = isHumanSeat(idx);
-  const show = humanTurn && (game.phase === 'main' || game.phase === 'flight');
+  const show = humanTurn && (game.phase === 'roll' || game.phase === 'main' || game.phase === 'flight');
   els.actionBar.style.display = show ? '' : 'none';
   els.diceBtn.hidden = !(humanTurn && game.phase === 'roll');
   els.tradeBtn.hidden = !(humanTurn && game.phase === 'main');
+  els.buildsBtn.hidden = !(humanTurn && (game.phase === 'main' || game.phase === 'flight'));
   els.flyBtn.hidden = !(humanTurn && game.phase === 'main' && E.canFly(game));
   els.endTurnBtn.hidden = !(humanTurn && (game.phase === 'main' || game.phase === 'flight'));
 }
@@ -778,6 +817,7 @@ function renderAll() {
   if (!game) return;
   els.turnNum.textContent = game.turnNumber;
   renderPlayers();
+  renderPhaseSteps();
   renderBank();
   renderLog();
   renderBoard();

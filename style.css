@@ -44,11 +44,7 @@ b, strong, .num { font-family: var(--font-num); }
     max(12px, env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
 }
-/* 席の設定ではタイトル画面用の簡素な上段（.setup__top）を出すので、共通バーはゲーム画面だけに出す */
-.bar { display: none; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.app:has(#gamePanel:not([hidden])) .bar { display: flex; }
-.bar__title { margin: 0; font-size: 16px; }
-.bar__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pill {
   border: 1px solid var(--btn-edge);
   background: var(--btn-bg);
@@ -128,32 +124,51 @@ b, strong, .num { font-family: var(--font-num); }
 .seat-row__levels { flex: 1 1 100%; display: flex; gap: 6px; flex-wrap: wrap; }
 .seat-row__levels .btn { flex: 1; min-width: 72px; min-height: 44px; font-size: 13px; padding: 0 8px; }
 
-/* ---- ゲーム画面 ---- */
-.game { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 240px; gap: 12px; }
-@media (min-width: 901px) { .app:has(#gamePanel:not([hidden])) { height: 100dvh; } }
-.side { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; overflow-y: auto; }
-.side-head { display: flex; align-items: center; justify-content: flex-end; padding: 2px 4px; }
-.side-head__tag { font-size: 12px; color: var(--muted); }
-.side-head__tag b { color: var(--fg); }
+/* ---- ゲーム画面（デザイン案 Main.dc.html）---- */
+.game { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; width: 100%; }
 
-.players { display: flex; flex-direction: column; gap: 6px; }
-.player-card { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--panel); border: 1px solid var(--panel-edge); }
+/* 上段: TURN n と、44px の四角いアイコンボタン */
+.game-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-height: 44px; }
+.game-head__turn { display: flex; align-items: baseline; gap: 8px; }
+.game-head__turn span { font-family: var(--font-num); font-weight: 700; font-size: 13px; letter-spacing: 0.12em; color: var(--muted); }
+.game-head__turn b { font-size: 22px; }
+.game-head__icons { display: flex; gap: 6px; flex-wrap: wrap; }
+.icon-btn {
+  width: 44px; height: 44px; padding: 0; border-radius: 12px;
+  border: 1px solid var(--btn-edge); background: var(--panel); color: var(--fg);
+  display: grid; place-items: center; font-family: var(--font-num); font-weight: 700; font-size: 17px;
+  cursor: pointer;
+}
+.icon-btn[aria-pressed="false"] { opacity: 0.5; }
+.icon-btn--wide { width: auto; padding: 0 14px; font-size: 12px; }
+
+/* 得点チップの横並び */
+.players { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; }
+.player-card { display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; border-radius: 12px; background: var(--panel); border: 1px solid var(--panel-edge); }
 .player-card.is-turn { background: var(--panel-2); border: 1.5px solid var(--accent); }
-.player-card__dot { flex: none; width: 24px; height: 24px; border-radius: 50%; }
-.player-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.player-card__name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.player-card__sub { font-size: 11px; color: var(--muted); }
-.player-card__vp { font-size: 18px; font-weight: 700; color: var(--accent-hi); flex: none; }
+.player-card__dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.player-card__body { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; min-width: 0; }
+.player-card__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-card__vp { font-family: var(--font-num); font-weight: 700; font-size: 20px; line-height: 1; color: var(--fg); }
+.player-card.is-turn .player-card__vp { color: var(--accent-hi); }
+.player-card__max { font-size: 11px; color: var(--muted); }
+
+/* 手番の段階: 1 サイコロ / 2 交易・建設 / 3 飛行 */
+.phase-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; font-size: 11px; }
+.phase-steps__item { padding: 6px 0; text-align: center; border-radius: 8px; background: var(--panel); color: var(--muted); }
+.phase-steps__item b { color: var(--fg); }
+.phase-steps__item.is-current { background: #2a2410; color: var(--accent); font-weight: 700; border: 1px solid var(--accent); }
+.phase-steps__item.is-current b { color: var(--accent); }
 
 .bank__grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; font-size: 11px; text-align: center; }
 .bank__res b { display: block; font-size: 14px; }
-.log { flex: 1; min-height: 0; overflow-y: auto; font-size: 12px; color: var(--muted); display: flex; flex-direction: column-reverse; }
+.log { min-height: 0; max-height: 40vh; overflow-y: auto; font-size: 12px; color: var(--muted); display: flex; flex-direction: column-reverse; margin-top: 10px; }
 
 .board-area { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-height: 0; }
-/* .stage は盤の形（JS が viewBox から計算する aspect-ratio）に合わせて縦を決める。
-   周りに空きができないよう、箱の大きさそのものを盤の比率に合わせる */
+/* .stage: 盤はだいたい縦長（デザイン案 Main.dc.html の 362x440 に近い比率）。残りの行に収まるよう上限も付ける */
 .stage {
-  position: relative; width: 100%; border-radius: 16px; overflow: hidden;
+  position: relative; width: 100%; aspect-ratio: 360 / 440; max-height: 52dvh;
+  border-radius: 16px; overflow: hidden;
   background: var(--bg); display: grid; place-items: center; touch-action: manipulation; user-select: none;
 }
 #board { width: 100%; height: 100%; }
@@ -191,23 +206,35 @@ b, strong, .num { font-family: var(--font-num); }
 .enc-opt-btn { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 16px; text-align: left; }
 .enc-hint { font-size: 12px; font-weight: 400; line-height: 1.5; opacity: 0.8; }
 
+/* 盤の下: 手札（デザイン案 Main.dc.html の資源カード）・操作 */
+.game-bottom { display: flex; flex-direction: column; gap: 8px; }
+.bottom-panel { display: flex; flex-direction: column; gap: 8px; }
 .hand { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.hand__res { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--btn-edge); font-size: 11px; }
-.hand__res b { font-size: 14px; }
-.upgrades { display: flex; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--muted); }
-.upgrades span { flex: 1; text-align: center; }
-.upgrades b { display: block; color: var(--fg); font-size: 14px; }
-.friend-cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hand__res { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0; border-radius: 10px; background: var(--panel-2); font-size: 10px; color: var(--muted); }
+.hand__res b { font-family: var(--font-num); font-size: 16px; color: var(--fg); line-height: 1; }
+.bottom-panel__row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.friend-cards { display: flex; flex-wrap: wrap; gap: 6px; }
 .friend-chip { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--btn-edge); font-size: 11px; max-width: 100%; }
 .friend-chip b { font-size: 12px; }
 .friend-chip small { color: var(--muted); }
 
-.builds { display: flex; flex-direction: column; gap: 6px; }
+/* 「建てる・交易」は dialog の中の長いリスト */
+.builds-dialog[open] { max-height: min(600px, 84dvh); display: flex; flex-direction: column; }
+.builds { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .build-btn { min-height: 44px; padding: 8px 10px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--btn-bg); border: 1px solid var(--btn-edge); font-size: 13px; text-align: left; }
 .build-btn.is-selected { background: rgba(255, 207, 90, 0.14); border-color: var(--accent); }
 .build-btn small { color: var(--muted); font-size: 11px; }
 
-.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: auto; }
+
+@media (min-width: 901px) {
+  .app:has(#gamePanel:not([hidden])) { height: 100dvh; }
+  .game { max-width: 760px; margin: 0 auto; }
+  .stage { max-height: 62dvh; }
+  .game-bottom { flex-direction: row; align-items: stretch; }
+  .game-bottom .bottom-panel { flex: 1 1 60%; }
+  .game-bottom .actions { flex: 0 0 38%; grid-template-columns: 1fr; margin-top: 0; }
+}
 
 .overlay { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(5, 6, 10, 0.7); }
 .sheet { width: min(440px, 100%); max-height: min(560px, 86dvh); overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
@@ -228,12 +255,3 @@ b, strong, .num { font-family: var(--font-num); }
 @media (prefers-reduced-motion: reduce) { .tap-glow { animation: none; } }
 
 /* 全画面のオーバーレイ・モーダルを隠すときは opacity ではなく display: none */
-
-@media (max-width: 900px) {
-  .game { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; gap: 8px; }
-  .players { flex-direction: row; flex-wrap: wrap; }
-  .player-card { flex: 1 1 45%; }
-  .board-area { order: -1; }
-  .stage { max-height: calc(100dvh - 260px); }
-  .log { max-height: 70px; }
-}

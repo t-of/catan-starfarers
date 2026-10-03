@@ -36,17 +36,7 @@
 </head>
 <body>
   <main class="app">
-    <header class="bar" id="topBar">
-      <h1 class="bar__title">宇宙を開拓するボードゲーム（試作）</h1>
-      <div class="bar__actions">
-        <button class="pill" id="homeBtn" hidden>タイトルへ</button>
-        <button class="pill" data-wak="install" hidden>アプリにする</button>
-        <button class="pill" id="soundBtn" aria-pressed="true">音 オン</button>
-        <button class="pill" id="cpuSpeedBtn">CPU ふつう</button>
-        <button class="pill" id="helpBtn">遊び方</button>
-        <button class="pill" data-wak="share">共有</button>
-      </div>
-    </header>
+    <h1 class="visually-hidden">宇宙を開拓するボードゲーム（試作）</h1>
 
     <dialog class="help-dialog" id="helpDialog">
       <h2>30秒でわかる遊び方</h2>
@@ -104,16 +94,37 @@
       </div>
     </section>
 
-    <!-- ゲーム画面 -->
+    <!-- ゲーム画面（デザイン案 Main.dc.html） -->
     <section class="game" id="gamePanel" hidden>
-      <aside class="side side--left">
-        <div class="side-head">
-          <span class="side-head__tag">ターン <b id="turnNum">1</b></span>
+      <header class="game-head">
+        <div class="game-head__turn">
+          <span>TURN</span>
+          <b id="turnNum">1</b>
         </div>
-        <div class="players" id="playersBar"></div>
-        <div class="panel bank" id="bankPanel"></div>
-        <div class="panel log" id="logPanel"></div>
-      </aside>
+        <div class="game-head__icons">
+          <button class="icon-btn" id="homeBtn" aria-label="タイトルへ" hidden>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4 L5 9 L11 14 M5 9 H14"></path></svg>
+          </button>
+          <button class="icon-btn icon-btn--wide" data-wak="install" hidden>アプリにする</button>
+          <button class="icon-btn icon-btn--wide" id="cpuSpeedBtn">CPU ふつう</button>
+          <button class="icon-btn" id="logBtn" aria-label="銀行・ログ">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3 H15 V15 H3 Z M3 7 H15 M6 11 H12"></path></svg>
+          </button>
+          <button class="icon-btn" id="soundBtn" aria-label="音" aria-pressed="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7 H6 L10 3.5 V14.5 L6 11 H3 Z"></path><path d="M12.5 6.5 C13.8 7.8 13.8 10.2 12.5 11.5"></path></svg>
+          </button>
+          <button class="icon-btn" id="helpBtn" aria-label="遊び方">?</button>
+          <button class="icon-btn icon-btn--wide" data-wak="share">共有</button>
+        </div>
+      </header>
+
+      <div class="players" id="playersBar"></div>
+
+      <div class="phase-steps" id="phaseSteps">
+        <div class="phase-steps__item" data-phase="roll">1 サイコロ <b id="phaseDice"></b></div>
+        <div class="phase-steps__item" data-phase="main">2 交易・建設</div>
+        <div class="phase-steps__item" data-phase="flight">3 飛行</div>
+      </div>
 
       <div class="board-area">
         <div class="stage" id="stage">
@@ -123,24 +134,35 @@
         <div class="panel message" id="banner"></div>
       </div>
 
-      <aside class="side side--right">
-        <div class="panel hand-panel">
-          <div class="panel__head"><span>手札</span><span id="handCount"></span></div>
+      <div class="game-bottom">
+        <div class="panel bottom-panel">
           <div class="hand" id="handBar"></div>
-          <div class="upgrades" id="upgradeBar"></div>
+          <div class="bottom-panel__row" id="upgradeBar"></div>
           <div class="friend-cards" id="friendBar"></div>
+          <span id="handCount" hidden></span>
         </div>
-        <div class="panel builds-panel">
-          <div class="panel__head">建てる・交易</div>
-          <div class="builds" id="buildGrid"></div>
-        </div>
+
         <div class="actions" id="actionBar">
           <button class="btn" id="diceBtn">サイコロ</button>
           <button class="btn" id="tradeBtn">銀行と交易</button>
+          <button class="btn" id="buildsBtn">建てる・交易</button>
           <button class="btn" id="flyBtn">母船を振って飛行へ</button>
           <button class="btn btn--accent btn--wide" id="endTurnBtn">手番を終える</button>
         </div>
-      </aside>
+      </div>
+
+      <dialog class="help-dialog builds-dialog" id="buildsDialog">
+        <h2>建てる・交易</h2>
+        <div class="builds" id="buildGrid"></div>
+        <button type="button" class="btn" id="buildsCloseBtn">閉じる</button>
+      </dialog>
+
+      <dialog class="help-dialog" id="logDialog">
+        <h2>銀行・ログ</h2>
+        <div class="panel bank" id="bankPanel"></div>
+        <div class="panel log" id="logPanel"></div>
+        <button type="button" class="btn" id="logCloseBtn">閉じる</button>
+      </dialog>
 
       <div class="overlay" id="panelOverlay" hidden>
         <div class="panel sheet" id="panel"></div>
