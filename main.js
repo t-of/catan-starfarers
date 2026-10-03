@@ -24,5 +24,34 @@ if ('serviceWorker' in navigator) {
 function setAudioSession(soundOn) {
   try { if (navigator.audioSession) navigator.audioSession.type = soundOn ? 'playback' : 'auto'; } catch { /* 対応していない */ }
 }
+let audioCtx = null;
+function beep(freq, dur) {
+  try {
+    if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); setAudioSession(true); }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + dur);
+  } catch { /* 音が出せなくても遊べる */ }
+}
+// engine.js の game.events に積まれる名前と合わせる（10章）。画面本体は次の作業（1b）で作る
+const SOUND = {
+  dice: () => beep(340, 0.12),
+  build: () => beep(520, 0.1),
+  trade: () => beep(460, 0.1),
+  rob: () => beep(220, 0.2),
+  shake: () => beep(300, 0.08),
+  reveal: () => beep(500, 0.06),
+  clear: () => { beep(600, 0.08); setTimeout(() => beep(760, 0.1), 90); },
+  move: () => beep(700, 0.03),
+  shortage: () => beep(180, 0.08),
+  win: () => { beep(660, 0.15); setTimeout(() => beep(880, 0.25), 140); },
+};
 
-// ---- ここからアプリ本体 ----
+// ---- ここからアプリ本体（画面は次の作業 1b で作る） ----
