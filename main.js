@@ -468,13 +468,23 @@ function phaseHint(idx) {
 }
 function renderBanner() {
   const idx = E.currentPlayer(game);
-  let extra = '';
-  if (game.ballsShown) {
-    const wrap = document.createElement('span');
-    I.renderBalls(wrap, game.ballsShown);
-    extra = wrap.innerHTML;
-  }
-  els.banner.innerHTML = `<div>${phaseHint(idx)}</div>${extra ? `<div>${extra}</div>` : ''}${renderEncounterBallsHtml()}<div class="message__log">${escapeHtml(game.log[game.log.length - 1] || '')}</div>`;
+  els.banner.innerHTML = `<div>${phaseHint(idx)}</div>${renderMothershipResultHtml(idx)}${renderEncounterBallsHtml()}<div class="message__log">${escapeHtml(game.log[game.log.length - 1] || '')}</div>`;
+}
+// 母船を振った結果（デザイン案 Encounter.dc.html の上段）。出た玉・速さとその内訳・黒なら「遭遇！」の札
+function renderMothershipResultHtml(idx) {
+  if (!game.ballsShown) return '';
+  const wrap = document.createElement('span');
+  I.renderBalls(wrap, game.ballsShown);
+  const bd = E.speedBreakdown(game.ballsShown, game.players[idx]);
+  const parts = [`玉 ${bd.ball}`];
+  if (bd.booster) parts.push(`ブースター ${bd.booster}`);
+  if (bd.cardBonus) parts.push(`友好カード ${bd.cardBonus}`);
+  return `<div class="mothership-result">
+    <div class="mothership-result__icon">${I.MOTHERSHIP_ICON_SVG}</div>
+    <div class="mothership-result__balls">${wrap.innerHTML}</div>
+    <div class="mothership-result__speed"><span class="mothership-result__label">速さ</span><span class="mothership-result__num">${bd.total}</span><span class="mothership-result__detail">${parts.join(' ＋ ')}</span></div>
+    ${bd.black ? '<span class="encounter-badge">遭遇！</span>' : ''}
+  </div>`;
 }
 // 遭遇の戦い・速さ比べで両者が振った玉（3.8: 両方の玉を見せる）。片付いたあとも次の遭遇まで残して見せる
 function renderEncounterBallsHtml() {
@@ -563,20 +573,29 @@ function renderEncounterPanel() {
   const pending = enc.pending;
   let body = '';
   if (pending.kind === 'yesno') {
-    body = `<div class="sheet__row"><button class="card-btn" data-act="yes">はい</button><button class="card-btn" data-act="no">いいえ</button></div>`;
+    body = `<div class="enc-opts"><button class="enc-opt-btn" data-act="yes"><span>はい</span></button><button class="enc-opt-btn" data-act="no"><span>いいえ</span></button></div>`;
   } else if (pending.kind === 'amount') {
     body = `<div class="res-pick">${Array.from({ length: pending.max + 1 }, (_, n) => `<button data-act="amount" data-n="${n}">${n}枚</button>`).join('')}</div>`;
   } else if (pending.kind === 'pickShip') {
-    body = `<div class="sheet__row">${game.players[idx].ships.map((s) => `<button class="card-btn" data-act="ship" data-id="${s.id}">${s.kind === 'colony' ? '植民船' : '交易船'}</button>`).join('')}</div>`;
+    body = `<div class="enc-opts">${game.players[idx].ships.map((s) => `<button class="enc-opt-btn" data-act="ship" data-id="${s.id}"><span>${s.kind === 'colony' ? '植民船' : '交易船'}</span></button>`).join('')}</div>`;
   } else if (pending.kind === 'pickResource') {
     body = `<div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="res" data-r="${r}">${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>`;
   } else if (pending.kind === 'pickUpgrade') {
-    body = `<div class="sheet__row">
-      <button class="card-btn" data-act="upg" data-k="booster">ブースター</button>
-      <button class="card-btn" data-act="upg" data-k="cannon">大砲</button>
-      <button class="card-btn" data-act="upg" data-k="pod">貨物ポッド</button></div>`;
+    body = `<div class="enc-opts">
+      <button class="enc-opt-btn" data-act="upg" data-k="booster"><span>ブースター</span></button>
+      <button class="enc-opt-btn" data-act="upg" data-k="cannon"><span>大砲</span></button>
+      <button class="enc-opt-btn" data-act="upg" data-k="pod"><span>貨物ポッド</span></button></div>`;
   }
-  els.panel.innerHTML = `<h2>遭遇: ${def.name}</h2><p>${escapeHtml(def.prompt)}</p>${body}`;
+  const turnLine = isHumanSeat(idx) ? 'あなたの遭遇です' : `${E.playerName(game, idx)}の遭遇です`;
+  els.panel.innerHTML = `<div class="enc-card">
+    <div class="enc-card__art">${I.ENCOUNTER_ART_SVG}</div>
+    <div class="enc-card__body">
+      <div class="enc-card__head"><h2>${escapeHtml(def.name)}</h2><span class="enc-card__no">遭遇 ${def.id.replace('E', '').padStart(2, '0')}</span></div>
+      <p class="enc-card__prompt">${escapeHtml(def.prompt)}</p>
+      ${body}
+    </div>
+  </div>
+  <div class="enc-card__turn">${turnLine}</div>`;
   bindPanel({
     yes: () => { E.encounterAnswer(game, { yes: true }); persistAndRender(); },
     no: () => { E.encounterAnswer(game, { yes: false }); persistAndRender(); },

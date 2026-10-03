@@ -928,6 +928,13 @@ export function combatFromPicks(picks, player) {
   const base = picks.includes('k') ? 0 : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
   return base + player.cannons + combatBonusFromCards(player);
 }
+// 速さの内訳（表示用。玉の分・ブースターの分・友好カードの分）
+export function speedBreakdown(picks, player) {
+  const black = picks.includes('k');
+  const ball = black ? BASE_SPEED_ON_BLACK : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
+  const cardBonus = speedBonusFromCards(player);
+  return { ball, booster: player.boosters, cardBonus, black, total: ball + player.boosters + cardBonus };
+}
 export function shakeMothership(game, rng = Math.random) {
   if (game.phase !== 'main') return null;
   const idx = currentPlayer(game); const p = game.players[idx];

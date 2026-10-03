@@ -172,3 +172,25 @@ export function renderBalls(container, picks) {
     container.appendChild(b);
   });
 }
+
+// 母船の小さなアイコン（デザイン案 Encounter.dc.html の円盤を簡略化。banner の玉の結果に添える）
+export const MOTHERSHIP_ICON_SVG = `<svg width="56" height="34" viewBox="0 0 140 86" aria-hidden="true">
+  <ellipse cx="70" cy="40" rx="62" ry="16" fill="#2a3158" stroke="#8ea0ff" stroke-opacity="0.5"/>
+  <path d="M30 36 C34 16 106 16 110 36 Z" fill="#3a4580" stroke="#8ea0ff" stroke-opacity="0.5"/>
+  <ellipse cx="70" cy="30" rx="16" ry="6" fill="#8fe3ff" opacity="0.35"/>
+  <circle cx="18" cy="42" r="2.5" fill="#ffcf5a"/><circle cx="44" cy="50" r="2.5" fill="#ffcf5a"/><circle cx="96" cy="50" r="2.5" fill="#ffcf5a"/><circle cx="122" cy="42" r="2.5" fill="#ffcf5a"/>
+</svg>`;
+
+// 遭遇カードのイラスト枠（共通の1枚。暗い宇宙に望遠鏡のシルエット。遭遇ごとには作らない）
+export const ENCOUNTER_ART_SVG = `<svg width="358" height="150" viewBox="0 0 358 150" aria-hidden="true" style="width:100%;height:100%">
+  <g fill="#ffffff"><circle cx="30" cy="24" r="1.2" opacity="0.7"/><circle cx="120" cy="16" r="0.9" opacity="0.5"/><circle cx="300" cy="36" r="1.3" opacity="0.6"/><circle cx="250" cy="122" r="1" opacity="0.5"/><circle cx="60" cy="114" r="0.8" opacity="0.6"/><circle cx="330" cy="96" r="0.9" opacity="0.5"/></g>
+  <circle cx="179" cy="75" r="42" fill="none" stroke="#ffcf5a" stroke-opacity="0.15" stroke-width="10"/>
+  <circle cx="179" cy="75" r="25" fill="none" stroke="#ffcf5a" stroke-opacity="0.25" stroke-width="4"/>
+  <g transform="translate(179 75) rotate(-20)">
+    <rect x="-24" y="-11" width="48" height="22" rx="11" fill="#c9d1f5" stroke="#0a0d1c" stroke-width="2"/>
+    <rect x="-7" y="-11" width="6" height="22" fill="#8f9bc8"/>
+    <circle cx="11" cy="0" r="4.5" fill="#0d1230" stroke="#0a0d1c" stroke-width="1.5"/>
+    <path d="M-24 0 L-37 0 M-37 -7 L-37 7" stroke="#c9d1f5" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cy="-15" r="3" fill="#ff5a6e"/>
+  </g>
+</svg>`;

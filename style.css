@@ -164,6 +164,29 @@ b, strong, .num { font-family: var(--font-num); }
 .enc-vs { display: flex; gap: 16px; align-items: center; margin: 4px 0; }
 .enc-vs__side { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
 
+/* 母船を振った結果（banner。デザイン案 Encounter.dc.html の上段） */
+.mothership-result { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
+.mothership-result__icon { line-height: 0; flex: none; }
+.mothership-result__balls { display: flex; align-items: center; }
+.mothership-result__speed { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.mothership-result__label { font-size: 12px; color: var(--muted); }
+.mothership-result__num { font-family: var(--font-num); font-weight: 700; font-size: 22px; color: var(--accent-hi); }
+.mothership-result__detail { font-size: 11px; color: var(--muted); }
+.encounter-badge { padding: 4px 14px; border-radius: 999px; background: #3a0f18; border: 1px solid #ff5a6e; color: #ffb3bd; font-weight: 700; font-size: 13px; letter-spacing: 0.08em; }
+
+/* 遭遇カード（デザイン案 Encounter.dc.html 下段） */
+.enc-card { display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: var(--card); color: #1b1f33; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); }
+.enc-card__art { background: #0d1230; display: grid; place-items: center; height: 120px; }
+.enc-card__body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.enc-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.enc-card__head h2 { margin: 0; font-size: 18px; font-weight: 700; color: #1b1f33; }
+.enc-card__no { font-family: var(--font-num); font-size: 11px; color: #6a6f86; flex: none; }
+.enc-card__prompt { margin: 0; font-size: 14px; line-height: 1.7; color: #33384f; }
+.enc-card__turn { text-align: center; font-size: 12px; color: var(--muted); }
+.enc-opts { display: flex; flex-direction: column; gap: 8px; }
+.enc-opt-btn { min-height: 48px; border-radius: 12px; border: 1.5px solid #1b1f33; background: transparent; color: #1b1f33; font: inherit; font-size: 15px; font-weight: 700; padding: 0 16px; cursor: pointer; }
+.enc-opt-btn:first-child { border: none; background: #1b1f33; color: #ffe39a; }
+
 .hand { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .hand__res { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--btn-edge); font-size: 11px; }
 .hand__res b { font-size: 14px; }
@@ -191,7 +214,7 @@ b, strong, .num { font-family: var(--font-num); }
 .stepper { display: flex; align-items: center; gap: 6px; }
 .stepper button { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--btn-edge); background: var(--btn-bg); color: inherit; cursor: pointer; }
 .res-pick { display: flex; gap: 6px; flex-wrap: wrap; }
-.res-pick button { border-radius: 10px; border: 1px solid var(--btn-edge); background: var(--btn-bg); color: inherit; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.res-pick button { min-height: 44px; border-radius: 10px; border: 1px solid var(--btn-edge); background: var(--btn-bg); color: inherit; padding: 6px 14px; cursor: pointer; font-size: 13px; }
 .res-pick button.is-selected { background: var(--accent); color: #1a1406; border-color: var(--accent-hi); }
 .ghost-btn { border-radius: 10px; border: 1px solid var(--btn-edge); background: transparent; color: inherit; padding: 8px 16px; cursor: pointer; font-size: 13px; }
 
