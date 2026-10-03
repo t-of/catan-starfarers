@@ -33,15 +33,73 @@
 <body>
   <main class="app">
     <header class="bar">
-      <h1 class="bar__title">catan-starfarers</h1>
+      <h1 class="bar__title">宇宙を開拓するボードゲーム（試作）</h1>
       <div class="bar__actions">
+        <button class="pill" id="homeBtn" hidden>タイトルへ</button>
         <button class="pill" data-wak="install" hidden>アプリにする</button>
+        <button class="pill" id="soundBtn" aria-pressed="true">音 オン</button>
+        <button class="pill" id="cpuSpeedBtn">CPU ふつう</button>
         <button class="pill" data-wak="share">共有</button>
       </div>
     </header>
 
-    <section class="stage" id="stage">
-      <!-- ここにゲーム本体 -->
+    <!-- 席の設定 -->
+    <section class="setup" id="setupPanel">
+      <p class="setup__lead">母船を振って速さを決め、植民船と交易船で星々へ。植民地を広げ15点を目指す、3〜4人のボードゲームの試作です。</p>
+      <div class="panel setup__panel">
+        <div class="setup__row">
+          <span>人数</span>
+          <div class="segmented" id="playerCountPicker">
+            <button class="btn" data-count="3">3人</button>
+            <button class="btn" data-count="4">4人</button>
+          </div>
+        </div>
+        <div class="seats" id="seatsPanel"></div>
+        <button class="btn btn--accent btn--big" id="startBtn">はじめる</button>
+        <button class="btn" id="continueBtn" hidden>つづきから</button>
+      </div>
+    </section>
+
+    <!-- ゲーム画面 -->
+    <section class="game" id="gamePanel" hidden>
+      <aside class="side side--left">
+        <div class="side-head">
+          <span class="side-head__tag">ターン <b id="turnNum">1</b></span>
+        </div>
+        <div class="players" id="playersBar"></div>
+        <div class="panel bank" id="bankPanel"></div>
+        <div class="panel log" id="logPanel"></div>
+      </aside>
+
+      <div class="board-area">
+        <div class="stage" id="stage">
+          <svg id="board" viewBox="0 0 10 10" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="hint" id="hint"></div>
+        </div>
+        <div class="panel message" id="banner"></div>
+      </div>
+
+      <aside class="side side--right">
+        <div class="panel hand-panel">
+          <div class="panel__head"><span>手札</span><span id="handCount"></span></div>
+          <div class="hand" id="handBar"></div>
+          <div class="upgrades" id="upgradeBar"></div>
+        </div>
+        <div class="panel builds-panel">
+          <div class="panel__head">建てる・交易</div>
+          <div class="builds" id="buildGrid"></div>
+        </div>
+        <div class="actions" id="actionBar">
+          <button class="btn" id="diceBtn">サイコロ</button>
+          <button class="btn" id="tradeBtn">銀行と交易</button>
+          <button class="btn" id="flyBtn">母船を振って飛行へ</button>
+          <button class="btn btn--accent btn--wide" id="endTurnBtn">手番を終える</button>
+        </div>
+      </aside>
+
+      <div class="overlay" id="panelOverlay" hidden>
+        <div class="panel sheet" id="panel"></div>
+      </div>
     </section>
 
     <footer class="credit">
@@ -50,6 +108,6 @@
   </main>
 
   <script src="./webapp-kit/webapp-kit.js"></script>
-  <script src="./main.js"></script>
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
