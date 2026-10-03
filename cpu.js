@@ -209,6 +209,8 @@ export function cpuPlayFlight(game, rng = Math.random) {
 export function playTurn(game, rng = Math.random) {
   while (game.phase.startsWith('setup')) { if (!cpuSetupStep(game)) break; }
   if (game.phase === 'gameOver') return;
+  resolveEncountersCpu(game); // 前の呼び出しで遭遇が片付かず残っていたら、まずそれを片付ける（止まり続けるのを防ぐ）
+  if (game.phase === 'gameOver') return;
   if (game.phase === 'roll') E.rollDice(game, rng);
   resolvePendingCardsCpu(game); // 銀河救援基金（産出直後に起きる）
   while (game.phase === 'discard') {

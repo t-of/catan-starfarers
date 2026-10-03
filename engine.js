@@ -1101,7 +1101,10 @@ function shipPickOrAuto(game, enc) {
 function jumpPickOrAuto(game, enc) {
   const p = game.players[enc.idx];
   if (p.ships.length <= 1) {
-    enc.pending = { kind: 'jumpTarget', shipId: p.ships[0] ? p.ships[0].id : null };
+    const ship = p.ships[0];
+    // 船が無い/跳べる先が無ければ答えようがないので、何も起きず終わる（止まり続けるのを防ぐ）
+    if (ship && spaceJumpTargets(game, ship.id).length) enc.pending = { kind: 'jumpTarget', shipId: ship.id };
+    else finishEncounter(game);
   } else {
     enc.pending = { kind: 'pickShip', purpose: 'jump' };
   }
@@ -1127,6 +1130,10 @@ function doSpeedCompare(game, enc, rng = Math.random) {
   return { win };
 }
 function finishEncounter(game) {
+  // 道中（onShipArriveの海賊/氷の片付けなど）で既に勝っていたら、ここで phase を 'flight' に
+  // 戻してゲーム終了を上書きしない（戻すと checkWin の winner!=null ガードで再判定されず、
+  // 勝ったはずの試合が止まらず続く原因になっていた）
+  if (game.winner != null) return;
   const idx = game.encounter ? game.encounter.idx : game.turn;
   game.encounter = null;
   game.phase = 'flight';
@@ -1263,7 +1270,9 @@ function answerAmount(game, enc, amount, rng) {
 function answerPickShip(game, enc, shipId) {
   if (!game.players[enc.idx].ships.some((s) => s.id === shipId)) return false;
   if (enc.pending.purpose === 'freeze') { freezeShip(game, shipId); finishEncounter(game); }
-  else { enc.pending = { kind: 'jumpTarget', shipId }; }
+  // 選んだ船に跳べる先が無ければ答えようがないので、何も起きず終わる（止まり続けるのを防ぐ）
+  else if (spaceJumpTargets(game, shipId).length) { enc.pending = { kind: 'jumpTarget', shipId }; }
+  else finishEncounter(game);
   return true;
 }
 function answerJumpTarget(game, enc, toVertexId) {

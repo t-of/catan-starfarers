@@ -364,6 +364,31 @@ test('宇宙港の場所が空いていないと交易船マーカーになり�
   assert.equal(p.ships.length, shipsBefore + 1); // 空いたら置かれる
 });
 
+test('遭遇中のジャンプ先で海賊/氷を片付けて勝っても、遭遇の後始末で勝ちが消えない', () => {
+  // 退行テスト: finishEncounter が game.phase を無条件で 'flight' に戻していたため、
+  // ジャンプの着地点（onShipArrive）で勝利条件に届いても、その直後に phase が
+  // 'flight' に巻き戻り、checkWin の winner!=null ガードで再判定もされず、
+  // ゲームが終わらず回り続けていた（300局に1局ほど）。
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const ship = p.ships[0];
+  p.cannons = 6; p.pods = 5; // どの強さの海賊・氷も片付けられるようにする
+  p.fame = 20; // 植民地2+宇宙港1*2=4点とあわせて14点、あと1点で勝ち
+  assert.equal(E.playerScore(g, idx), 14);
+  g.phase = 'flight';
+  const targets = E.spaceJumpTargets(g, ship.id);
+  const target = targets.find((vid) => g.board.vertices[vid].hexIds.some((hId) => g.board.hexes[hId].disc && g.board.hexes[hId].disc.token));
+  assert.ok(target != null, '海賊か氷のある場所へ跳べる先があるはず');
+  // E5「速さ比べに勝ってジャンプ」相当の pending を直接作る（CPUのでたらめな判定を経由しない）
+  g.phase = 'encounter';
+  g.encounter = { cardId: 'E5', idx, rightIdx: (idx + 1) % g.playerCount, pending: { kind: 'jumpTarget', shipId: ship.id } };
+  assert.ok(E.encounterAnswer(g, { toVertexId: target }));
+  assert.equal(g.phase, 'gameOver');
+  assert.equal(g.winner, idx);
+});
+
 test('摩耗（E9）が全員に効く', () => {
   const g = E.createGame(4, Math.random);
   doSetup(g);
