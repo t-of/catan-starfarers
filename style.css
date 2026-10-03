@@ -44,7 +44,9 @@ b, strong, .num { font-family: var(--font-num); }
     max(12px, env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
 }
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* 席の設定ではタイトル画面用の簡素な上段（.setup__top）を出すので、共通バーはゲーム画面だけに出す */
+.bar { display: none; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.app:has(#gamePanel:not([hidden])) .bar { display: flex; }
 .bar__title { margin: 0; font-size: 16px; }
 .bar__actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .pill {
@@ -93,24 +95,38 @@ b, strong, .num { font-family: var(--font-num); }
 .help-dialog ul { margin: 0 0 16px; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; }
 .help-dialog .btn { width: 100%; }
 
-/* ---- 席の設定 ---- */
-.setup { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px 10px; }
-.setup__lead { max-width: 440px; text-align: center; color: var(--muted); font-size: 14px; margin: 0; }
+/* ---- 席の設定（デザイン案 Setup.dc.html）---- */
+.setup { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 16px 10px 20px; }
+.setup__top { width: min(440px, 100%); display: flex; align-items: center; justify-content: space-between; }
+.setup__back { font-size: 13px; color: var(--muted); text-decoration: none; padding: 10px 4px; }
+.pill--icon { width: 44px; height: 44px; padding: 0; border-radius: 12px; font-family: var(--font-num); font-weight: 700; font-size: 17px; }
+
+.setup__hero { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.setup__kicker { font-family: var(--font-num); font-size: 12px; letter-spacing: 0.3em; color: var(--muted); }
+.setup__title { margin: 0; font-size: 24px; font-weight: 700; text-align: center; line-height: 1.35; }
+.setup__lead { max-width: 440px; text-align: center; color: var(--muted); font-size: 13px; margin: 0; }
 .setup__panel { width: min(440px, 100%); display: flex; flex-direction: column; gap: 10px; }
+.setup__actions { width: min(440px, 100%); display: flex; flex-direction: column; gap: 8px; }
 .setup__row { display: flex; align-items: center; gap: 10px; }
-.setup__row > span { width: 48px; flex: none; }
-.segmented { display: flex; gap: 6px; flex: 1; }
-.segmented .btn { flex: 1; }
+.setup__row > span { width: 48px; flex: none; font-size: 12px; color: var(--muted); }
+.segmented { display: flex; gap: 6px; flex: 1; padding: 4px; border-radius: 14px; background: var(--panel); }
+.segmented .btn { flex: 1; background: transparent; border: none; }
+.segmented .btn.is-selected { background: #2a2410; border: 1px solid var(--accent); color: var(--accent-hi); }
 
 .seats { display: flex; flex-direction: column; gap: 6px; }
-.seat-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.seat-row__dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.seat-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px;
+  border-radius: 14px; background: var(--panel); border: 1px solid var(--panel-edge);
+}
+.seat-row__dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
 .seat-row__name {
-  flex: 1 1 88px; min-width: 60px; max-width: 110px; font: inherit; font-size: 13px; color: var(--fg);
+  flex: 1 1 72px; min-width: 56px; font: inherit; font-size: 13px; color: var(--fg);
   background: var(--btn-bg); border: 1px solid var(--btn-edge); border-radius: 8px; padding: 7px 8px;
 }
-.seat-row__type { flex: 1 1 auto; min-width: 120px; display: flex; gap: 6px; }
-.seat-row__type .btn { min-height: 36px; font-size: 12px; padding: 6px 8px; flex: 1; }
+.seat-row__type { flex: none; display: flex; gap: 6px; }
+.seat-row__type .btn { min-height: 44px; font-size: 13px; padding: 0 12px; }
+.seat-row__levels { flex: 1 1 100%; display: flex; gap: 6px; flex-wrap: wrap; }
+.seat-row__levels .btn { flex: 1; min-width: 72px; min-height: 44px; font-size: 13px; padding: 0 8px; }
 
 /* ---- ゲーム画面 ---- */
 .game { flex: 1; min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 240px; gap: 12px; }

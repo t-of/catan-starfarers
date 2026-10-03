@@ -157,7 +157,7 @@ function renderSeatsPanel() {
     row.appendChild(type);
     if (seat.type === 'cpu') {
       const levelRow = document.createElement('div');
-      levelRow.className = 'seat-row__type';
+      levelRow.className = 'seat-row__levels';
       CPU.LEVELS.forEach((lv) => {
         const b = document.createElement('button');
         b.className = `btn${(seat.level || 'normal') === lv.id ? ' is-selected' : ''}`;
@@ -182,6 +182,7 @@ showCpuSpeed();
 // 遊び方ダイアログ(30秒でわかる短い説明)
 const helpDialog = document.getElementById('helpDialog');
 document.getElementById('helpBtn').addEventListener('click', () => helpDialog.showModal());
+document.getElementById('setupHelpBtn').addEventListener('click', () => helpDialog.showModal());
 document.getElementById('helpCloseBtn').addEventListener('click', () => helpDialog.close());
 helpDialog.addEventListener('click', (e) => { if (e.target === helpDialog) helpDialog.close(); });
 
@@ -228,6 +229,7 @@ els.continueBtn.addEventListener('click', () => {
 (function checkContinue() {
   const saved = migrateGame(load('game', null));
   els.continueBtn.hidden = !saved || saved.winner != null;
+  if (saved) els.continueBtn.textContent = `続きから（ターン ${saved.turnNumber}）`;
 })();
 els.homeBtn.addEventListener('click', () => {
   clearCpuTimer();

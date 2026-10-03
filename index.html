@@ -36,7 +36,7 @@
 </head>
 <body>
   <main class="app">
-    <header class="bar">
+    <header class="bar" id="topBar">
       <h1 class="bar__title">宇宙を開拓するボードゲーム（試作）</h1>
       <div class="bar__actions">
         <button class="pill" id="homeBtn" hidden>タイトルへ</button>
@@ -61,7 +61,32 @@
 
     <!-- 席の設定 -->
     <section class="setup" id="setupPanel">
-      <p class="setup__lead">母船を振って速さを決め、植民船と交易船で星々へ。植民地を広げ15点を目指す、3〜4人のボードゲームの試作です。</p>
+      <div class="setup__top">
+        <a class="setup__back" href="/">← T.OF...</a>
+        <button class="pill pill--icon" id="setupHelpBtn" aria-label="遊び方">?</button>
+      </div>
+
+      <div class="setup__hero">
+        <svg width="220" height="170" viewBox="0 0 220 170" aria-hidden="true">
+          <defs>
+            <radialGradient id="s-goods" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#f1e6ff"/><stop offset="0.45" stop-color="#a77cff"/><stop offset="1" stop-color="#3a2178"/></radialGradient>
+            <radialGradient id="s-fuel" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#ffd7a8"/><stop offset="0.45" stop-color="#ff7a33"/><stop offset="1" stop-color="#7a2408"/></radialGradient>
+            <radialGradient id="s-food" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#d0ffdc"/><stop offset="0.45" stop-color="#4fcf7c"/><stop offset="1" stop-color="#11502c"/></radialGradient>
+          </defs>
+          <ellipse cx="110" cy="92" rx="100" ry="34" fill="none" stroke="#8ea0ff" stroke-opacity="0.25" stroke-dasharray="2 5"/>
+          <ellipse cx="110" cy="92" rx="70" ry="22" fill="none" stroke="#8ea0ff" stroke-opacity="0.18"/>
+          <circle cx="110" cy="88" r="40" fill="url(#s-goods)"/>
+          <ellipse cx="110" cy="88" rx="62" ry="13" fill="none" stroke="#e3d2ff" stroke-width="2.5" opacity="0.85" transform="rotate(-14 110 88)"/>
+          <circle cx="22" cy="104" r="11" fill="url(#s-fuel)"/>
+          <circle cx="196" cy="70" r="8" fill="url(#s-food)"/>
+          <g transform="translate(168 132) rotate(35)"><path d="M0 -14 C7 -7 7 4 5 10 L-5 10 C-7 4 -7 -7 0 -14 Z" fill="#ffcf5a" stroke="#0a0d1c" stroke-width="1.5"/><path d="M-5 3 L-10 11 L-4 10 M5 3 L10 11 L4 10" fill="#ffcf5a" stroke="#0a0d1c" stroke-width="1.2"/><circle cy="-3" r="2.6" fill="#0a0d1c"/><path d="M-3 12 L0 20 L3 12" fill="#ff8a3d"/></g>
+          <g fill="#ffffff"><circle cx="40" cy="30" r="1.2" opacity="0.7"/><circle cx="180" cy="22" r="1" opacity="0.6"/><circle cx="64" cy="150" r="0.9" opacity="0.5"/><circle cx="206" cy="140" r="1.1" opacity="0.6"/><circle cx="14" cy="60" r="0.8" opacity="0.5"/></g>
+        </svg>
+        <div class="setup__kicker">PROTOTYPE</div>
+        <h2 class="setup__title">宇宙を開拓する<br>ボードゲーム</h2>
+        <p class="setup__lead">母船を振って星々へ。先に15点を取った人の勝ち</p>
+      </div>
+
       <div class="panel setup__panel">
         <div class="setup__row">
           <span>人数</span>
@@ -71,7 +96,10 @@
           </div>
         </div>
         <div class="seats" id="seatsPanel"></div>
-        <button class="btn btn--accent btn--big" id="startBtn">はじめる</button>
+      </div>
+
+      <div class="setup__actions">
+        <button class="btn btn--accent btn--big" id="startBtn">出発する</button>
         <button class="btn" id="continueBtn" hidden>つづきから</button>
       </div>
     </section>
