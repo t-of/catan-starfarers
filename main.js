@@ -356,6 +356,7 @@ function renderPlayers() {
   game.players.forEach((p, i) => {
     const card = document.createElement('div');
     card.className = `player-card${i === idx ? ' is-turn' : ''}`;
+    if (i === idx) card.style.borderColor = I.PLAYER_COLORS[i];
     const dot = document.createElement('span'); dot.className = 'player-card__dot'; dot.style.background = I.PLAYER_COLORS[i];
     const body = document.createElement('div'); body.className = 'player-card__body';
     const name = document.createElement('div'); name.className = 'player-card__name'; name.textContent = E.playerName(game, i) + (isCpuSeat(i) ? '（CPU）' : '');

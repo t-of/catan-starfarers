@@ -2,7 +2,16 @@
 // 盤の絵（SVG 要素を直に作る小さな関数の集まり）。凝らず、見分けがつく最小限にする（仕様4章）。
 // engine.js が作る board（hexes/vertices/edges/sectors）を読み、main.js が呼ぶ。
 
-export const RES_COLOR = { ore: '#9aa3b0', fuel: '#ff8a52', carbon: '#6d7d74', food: '#5fd58a', goods: '#c99bff' };
+// 資源ごとの色（惑星のグラデーションの中間色。Parts.dc.html のトークンに合わせる）
+export const RES_COLOR = { ore: '#9ea9bc', fuel: '#ff7a33', carbon: '#4f5d55', food: '#4fcf7c', goods: '#a77cff' };
+// 惑星の放射グラデーション（内側→中間→外側）。resource ごとに <radialGradient> を作って塗る
+const RES_GRADIENT_STOPS = {
+  ore: ['#eef2f8', '#9ea9bc', '#363f52'],
+  fuel: ['#ffd7a8', '#ff7a33', '#7a2408'],
+  carbon: ['#a7b6ab', '#4f5d55', '#161d19'],
+  food: ['#d0ffdc', '#4fcf7c', '#11502c'],
+  goods: ['#f1e6ff', '#a77cff', '#3a2178'],
+};
 export const PLAYER_COLORS = ['#ff6b6b', '#5ecbff', '#ffd35c', '#8cf59a'];
 const RACE_SHORT = { greenFolk: '緑', diplomat: '外交', merchant: '商人', scientist: '科学' }; // 3.9: 前哨基地の種族を短く示す
 
@@ -34,7 +43,16 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
 
   // 背景（宇宙）
-  el('rect', { x, y, width: w, height: h, fill: '#060810' }, svg);
+  el('rect', { x, y, width: w, height: h, fill: '#070a18' }, svg);
+
+  // 惑星の放射グラデーション（資源ごと。盤のたびに作り直す）
+  const defs = el('defs', {}, svg);
+  Object.entries(RES_GRADIENT_STOPS).forEach(([res, [c0, c1, c2]]) => {
+    const g = el('radialGradient', { id: `planet-${res}`, cx: '35%', cy: '30%', r: '75%' }, defs);
+    el('stop', { offset: '0', 'stop-color': c0 }, g);
+    el('stop', { offset: '0.45', 'stop-color': c1 }, g);
+    el('stop', { offset: '1', 'stop-color': c2 }, g);
+  });
   // 星屑（装飾。壊れても遊びに影響しない簡易なもの）
   const starsG = el('g', { opacity: 0.5 }, svg);
   for (let i = 0; i < 80; i++) {
@@ -43,7 +61,7 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
   }
 
   // 空のレーン（全交点をつなぐ辺）をうっすら
-  const laneG = el('g', { stroke: 'rgba(255,255,255,0.08)', 'stroke-width': 0.03 }, svg);
+  const laneG = el('g', { stroke: 'rgba(142,160,255,0.09)', 'stroke-width': 0.03 }, svg);
   board.edges.forEach((e) => {
     const a = board.vertices[e.v1], b = board.vertices[e.v2];
     if (a.kind === 'systemCenter' || b.kind === 'systemCenter') return;
@@ -53,15 +71,25 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
   // 惑星（資源を持つヘクス）
   board.hexes.forEach((hex) => {
     if (!hex.resource) return;
-    const poly = el('polygon', { points: hexPolyPoints(board, hex), fill: RES_COLOR[hex.resource], stroke: '#0b0c10', 'stroke-width': 0.04, opacity: hex.disc && hex.disc.faceUp ? 1 : 0.55 }, svg);
+    const poly = el('polygon', { points: hexPolyPoints(board, hex), fill: `url(#planet-${hex.resource})`, stroke: '#141a33', 'stroke-width': 0.04, opacity: hex.disc && hex.disc.faceUp ? 1 : 0.55 }, svg);
     const cx = hex.vertexIds.reduce((a, vid) => a + board.vertices[vid].x, 0) / 6;
     const cy = hex.vertexIds.reduce((a, vid) => a + board.vertices[vid].y, 0) / 6;
     if (hex.disc) {
-      let label = '？';
-      if (hex.disc.token) label = hex.disc.token.kind === 'pirate' ? `☠${hex.disc.token.strength}` : `❄${hex.disc.token.strength}`;
-      else if (hex.disc.faceUp) label = String(hex.disc.numbers[0]);
-      el('circle', { cx, cy, r: 0.26, fill: hex.disc.token ? '#2a1620' : '#11131a', stroke: '#fff', 'stroke-width': 0.02, opacity: 0.9 }, svg);
-      const t = el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.26, fill: '#fff' }, svg);
+      // 数字ディスク: 伏せは暗い円に「？」、めくれたら生成りの円に数字（6・8だけ赤）。海賊・氷の印は暗い円に赤/水色
+      let label = '？', discFill = '#2a3158', textFill = '#9aa6d6';
+      if (hex.disc.token) {
+        const isPirate = hex.disc.token.kind === 'pirate';
+        label = isPirate ? `☠${hex.disc.token.strength}` : `❄${hex.disc.token.strength}`;
+        discFill = isPirate ? '#1a0d12' : '#0e1f2b';
+        textFill = isPirate ? '#ff5a6e' : '#8fe3ff';
+      } else if (hex.disc.faceUp) {
+        const n = hex.disc.numbers[0];
+        label = String(n);
+        discFill = '#f4ecd8';
+        textFill = (n === 6 || n === 8) ? '#c8322f' : '#1b1f33';
+      }
+      el('circle', { cx, cy, r: 0.26, fill: discFill, stroke: '#0a0d1c', 'stroke-width': 0.03, opacity: 0.95 }, svg);
+      const t = el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.26, 'font-weight': 700, fill: textFill }, svg);
       t.textContent = label;
     }
   });
@@ -71,9 +99,9 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     if (sector.centerVertexId == null) return;
     const v = board.vertices[sector.centerVertexId];
     if (sector.kind === 'outpost') {
-      el('circle', { cx: v.x, cy: v.y, r: 0.22, fill: 'none', stroke: '#8fb8ff', 'stroke-width': 0.05 }, svg);
+      el('circle', { cx: v.x, cy: v.y, r: 0.22, fill: 'none', stroke: '#b79cff', 'stroke-width': 0.05, 'stroke-dasharray': '0.04 0.06' }, svg);
       if (sector.race) {
-        const rt = el('text', { x: v.x, y: v.y + 0.08, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#8fb8ff' }, svg);
+        const rt = el('text', { x: v.x, y: v.y + 0.08, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#b79cff' }, svg);
         rt.textContent = RACE_SHORT[sector.race] || '';
       }
       sector.tradeStations.forEach((ts, i) => {
@@ -91,8 +119,8 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       if (v.blocked) { el('circle', { cx: v.x, cy: v.y, r: 0.08, fill: '#444' }, svg); return; }
       if (v.building) {
         const col = PLAYER_COLORS[v.building.owner];
-        if (v.building.type === 'colony') el('circle', { cx: v.x, cy: v.y, r: 0.14, fill: col, stroke: '#0b0c10', 'stroke-width': 0.02 }, svg);
-        else { el('rect', { x: v.x - 0.16, y: v.y - 0.16, width: 0.32, height: 0.32, fill: col, stroke: '#fff', 'stroke-width': 0.02 }, svg); }
+        if (v.building.type === 'colony') el('circle', { cx: v.x, cy: v.y, r: 0.14, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.025 }, svg);
+        else { el('rect', { x: v.x - 0.16, y: v.y - 0.16, width: 0.32, height: 0.32, rx: 0.05, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.025 }, svg); }
       } else {
         el('circle', { cx: v.x, cy: v.y, r: 0.08, fill: 'none', stroke: 'rgba(255,255,255,0.35)', 'stroke-width': 0.025 }, svg);
       }
@@ -108,15 +136,15 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     const selected = v.id === selectedShipVertex;
     if (selected) el('circle', { cx: v.x, cy: v.y, r: 0.3, fill: 'none', stroke: '#fff', 'stroke-width': 0.04, opacity: 0.8 }, svg);
     const g = el('g', {}, svg);
-    el('circle', { cx: v.x, cy: v.y, r: 0.2, fill: col, stroke: '#0b0c10', 'stroke-width': 0.03 }, g);
-    const label = el('text', { x: v.x, y: v.y, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#0b0c10' }, g);
+    el('circle', { cx: v.x, cy: v.y, r: 0.2, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
+    const label = el('text', { x: v.x, y: v.y, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#0a0d1c' }, g);
     label.textContent = '◆'; // kind(colony/trade)は選んだ時の説明文で示す。アイコンは共通の船印でよい
   });
 
   // 行ける場所・タップできる場所を光らせる
   highlight.forEach((vid) => {
     const v = board.vertices[vid];
-    el('circle', { cx: v.x, cy: v.y, r: 0.22, fill: 'rgba(255,211,92,0.35)', stroke: '#ffd35c', 'stroke-width': 0.04, class: 'tap-glow' }, svg);
+    el('circle', { cx: v.x, cy: v.y, r: 0.22, fill: 'rgba(255,207,90,0.35)', stroke: '#ffcf5a', 'stroke-width': 0.04, class: 'tap-glow' }, svg);
   });
 
   // タップ判定（見た目に関係なく交点ぜんぶに大きめの透明な丸を重ねる）
