@@ -80,12 +80,17 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y }, laneG);
   });
 
-  // 惑星（資源を持つヘクス）
+  // セクターのヘクス: 暗い地の六角形（前哨基地は紫、母星の植民地は少し明るい紺）。資源のあるヘクスは中央に球体の惑星
   board.hexes.forEach((hex) => {
+    if (hex.sectorId == null) return;
+    const sector = board.sectors[hex.sectorId];
+    const [fill, stroke] = sector.kind === 'outpost' ? ['#1a1230', '#6a4fa8'] : sector.tier === 'colony' ? ['#161c38', '#3a4a85'] : ['#141a33', '#2c3866'];
+    el('polygon', { points: hexPolyPoints(board, hex), fill, stroke, 'stroke-width': 0.04 }, svg);
     if (!hex.resource) return;
-    const poly = el('polygon', { points: hexPolyPoints(board, hex), fill: `url(#planet-${hex.resource})`, stroke: '#141a33', 'stroke-width': 0.04, opacity: hex.disc && hex.disc.faceUp ? 1 : 0.55 }, svg);
     const cx = hex.vertexIds.reduce((a, vid) => a + board.vertices[vid].x, 0) / 6;
     const cy = hex.vertexIds.reduce((a, vid) => a + board.vertices[vid].y, 0) / 6;
+    el('circle', { cx, cy, r: 0.58, fill: `url(#planet-${hex.resource})` }, svg);
+    if (hex.resource === 'goods') el('ellipse', { cx, cy, rx: 0.83, ry: 0.21, fill: 'none', stroke: '#e3d2ff', 'stroke-width': 0.06, opacity: 0.8, transform: `rotate(-18 ${cx} ${cy})` }, svg);
     if (hex.disc) {
       // 数字ディスク: 伏せは暗い円に「？」、めくれたら生成りの円に数字（6・8だけ赤）。海賊・氷の印は暗い円に赤/水色
       let label = '？', discFill = '#2a3158', textFill = '#9aa6d6';
@@ -100,8 +105,10 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
         discFill = '#f4ecd8';
         textFill = (n === 6 || n === 8) ? '#c8322f' : '#1b1f33';
       }
-      el('circle', { cx, cy, r: 0.26, fill: discFill, stroke: '#0a0d1c', 'stroke-width': 0.03, opacity: 0.95 }, svg);
-      const t = el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.26, 'font-weight': 700, fill: textFill }, svg);
+      // 札は惑星の右下（デザイン案の位置）
+      const dx = cx + 0.375, dy = cy + 0.375;
+      el('circle', { cx: dx, cy: dy, r: 0.31, fill: discFill, stroke: '#0a0d1c', 'stroke-width': 0.05 }, svg);
+      const t = el('text', { x: dx, y: dy, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': hex.disc.token ? 0.26 : 0.38, 'font-weight': 700, fill: textFill }, svg);
       t.textContent = label;
     }
   });
