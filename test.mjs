@@ -287,7 +287,7 @@ test('黒が出たら遭遇が始まり、片付くまで船が動けない', ()
   doSetup(g);
   const idx = E.currentPlayer(g);
   let result;
-  for (let i = 0; i < 3000; i++) { g.phase = 'main'; result = E.shakeMothership(g, Math.random); if (result.black) break; }
+  for (let i = 0; i < 3000; i++) { g.phase = 'main'; result = E.shakeMothership(g, Math.random); if (result.black && g.phase === 'encounter') break; } // E9（摩耗）はその場で片付くので除く
   assert.ok(result.black);
   assert.equal(g.phase, 'encounter');
   assert.ok(g.encounter && g.encounter.idx === idx);
