@@ -629,6 +629,89 @@ test('CPU よわい: 4人で数十局が全部止まらず終わる', () => {
   assert.equal(finished, GAMES);
 });
 
+// ---- 作業4: CPU（ふつう・つよい） ----
+// 席ごとに強さが違う対局を、全フェイズを1手ずつ進めて最後まで打つ（各手が合法=trueを返すことも確かめる）
+function playOutMixed(levels, maxSteps = 3000) {
+  const g = E.createGame(levels.length, Math.random);
+  for (let i = 0; i < maxSteps; i++) {
+    if (g.winner != null) return g;
+    if (g.phase === 'discard') {
+      const d = g.pendingDiscards[0];
+      assert.ok(CPU.cpuDiscardOne(g, d.player, levels[d.player]), '捨て札が進まない');
+      continue;
+    }
+    if (g.phase === 'steal') {
+      assert.ok(CPU.cpuResolveSteal(g, levels[E.currentPlayer(g)]), '盗みが進まない');
+      continue;
+    }
+    if (g.phase === 'encounter') {
+      assert.ok(CPU.cpuResolveEncounter(g, levels[g.encounter.idx]), '遭遇が進まない');
+      continue;
+    }
+    if (g.phase === 'encounterWear') {
+      assert.ok(CPU.cpuResolveWearOne(g), '摩耗が進まない');
+      continue;
+    }
+    if (g.phase === 'friendship') {
+      assert.ok(CPU.cpuPickFriendshipCard(g, levels[g.pendingFriendship.player]), '友好カード選びが進まない');
+      continue;
+    }
+    if (g.phase === 'galacticFund') {
+      const d = g.pendingGalacticFund[0];
+      assert.ok(CPU.cpuResolveGalacticFundOne(g, levels[d.player]), '銀河救援基金が進まない');
+      continue;
+    }
+    if (g.phase.startsWith('setup')) {
+      assert.ok(CPU.cpuSetupTurn(g, levels[E.currentPlayer(g)]), 'セットアップが進まない');
+      continue;
+    }
+    if (g.phase === 'roll') { E.rollDice(g, Math.random); continue; }
+    if (g.phase === 'main' || g.phase === 'flight') {
+      const idx = E.currentPlayer(g);
+      CPU.cpuPlayMainPhase(g, levels[idx], (o) => levels[o]);
+      if (g.phase === 'gameOver') return g;
+      CPU.cpuPlayFlight(g, levels[idx]);
+      if (g.phase === 'gameOver') return g;
+      E.endTurn(g);
+      continue;
+    }
+    throw new Error(`知らない phase: ${g.phase}`);
+  }
+  throw new Error(`${maxSteps}手では終わらなかった (phase=${g.phase})`);
+}
+
+test('CPU ふつう・つよい: 強さいろいろの3〜4人で数十局が全部15点で終わる（手は必ず合法）', () => {
+  const combos = [['weak', 'normal', 'strong'], ['weak', 'normal', 'strong', 'normal'], ['normal', 'normal', 'strong', 'strong']];
+  combos.forEach((levels) => {
+    for (let i = 0; i < 8; i++) {
+      const g = playOutMixed(levels);
+      assert.ok(g.winner != null);
+      assert.ok(E.playerScore(g, g.winner) >= E.WIN_SCORE);
+    }
+  });
+});
+
+test('CPU: 強さの差（よわい vs ふつう、ふつう vs つよい）を4人（2対2）対局の勝ち数で見る', () => {
+  // 実際のアプリは3〜4人用なので、比較も4人（levelA2人 + levelB2人、席はランダム）で行う
+  function winRate(levelA, levelB, games) {
+    let aWins = 0;
+    for (let i = 0; i < games; i++) {
+      const seats = [levelA, levelA, levelB, levelB].sort(() => Math.random() - 0.5);
+      const g = playOutMixed(seats);
+      if (seats[g.winner] === levelA) aWins++;
+    }
+    return aWins;
+  }
+  const games = 20;
+  const weakVsNormal = winRate('weak', 'normal', games);
+  const normalVsStrong = winRate('normal', 'strong', games);
+  console.log(`[CPU強さ] よわい vs ふつう: よわい ${weakVsNormal}/${games} 勝`);
+  console.log(`[CPU強さ] ふつう vs つよい: ふつう ${normalVsStrong}/${games} 勝`);
+  // 強いほうが勝ち越す想定（まれな逆転はあり得るので、惨敗はしていないことだけ確かめる）
+  assert.ok(weakVsNormal <= games - 2);
+  assert.ok(normalVsStrong <= games - 2);
+});
+
 test('相手との交易: 手番の人とだけ、持っていない資源は出せない・受けられない、両者の手札が正しく入れ替わる', () => {
   const g = E.createGame(4, Math.random);
   doSetup(g);

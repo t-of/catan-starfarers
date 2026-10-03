@@ -102,7 +102,7 @@ const els = {
 };
 
 // ---- 席の設定 ----
-function defaultSeat(i) { return { type: i === 0 ? 'human' : 'cpu', name: '' }; }
+function defaultSeat(i) { return { type: i === 0 ? 'human' : 'cpu', level: 'normal', name: '' }; }
 function sanitizeName(s) { return String(s || '').replace(/[<>&"']/g, '').trim().slice(0, 10); }
 const SEAT_SLOTS = [0, 1, 2, 3];
 let playerCount = load('playerCount', 3);
@@ -111,6 +111,9 @@ let seats = uiSeats.slice(0, playerCount).map((s) => ({ ...s }));
 
 function isCpuSeat(i) { return !!(seats[i] && seats[i].type === 'cpu'); }
 function isHumanSeat(i) { return !isCpuSeat(i); }
+function seatLevel(i) { return (seats[i] && seats[i].level) || 'normal'; }
+// つよいCPUが交易を持ちかける相手として渡す。相手がCPUのときだけ強さを返し、人には持ちかけない
+function opponentLevelFor(i) { return isCpuSeat(i) ? seatLevel(i) : null; }
 
 function syncCountPicker() {
   [...els.playerCountPicker.children].forEach((b) => b.classList.toggle('is-selected', Number(b.dataset.count) === playerCount));
@@ -152,6 +155,18 @@ function renderSeatsPanel() {
       type.appendChild(b);
     });
     row.appendChild(type);
+    if (seat.type === 'cpu') {
+      const levelRow = document.createElement('div');
+      levelRow.className = 'seat-row__type';
+      CPU.LEVELS.forEach((lv) => {
+        const b = document.createElement('button');
+        b.className = `btn${(seat.level || 'normal') === lv.id ? ' is-selected' : ''}`;
+        b.textContent = lv.name;
+        b.addEventListener('click', () => { seat.level = lv.id; uiSeats[i] = { ...seat }; save('seats', uiSeats); renderSeatsPanel(); });
+        levelRow.appendChild(b);
+      });
+      row.appendChild(levelRow);
+    }
     els.seatsPanel.appendChild(row);
   });
 }
@@ -236,13 +251,13 @@ function scheduleCpu() {
   const delay = CPU_SPEEDS[cpuSpeed][1];
   if (game.phase === 'discard') {
     const pending = game.pendingDiscards.find((d) => isCpuSeat(d.player));
-    if (pending) cpuTimer = setTimeout(() => { CPU.cpuDiscardOne(game, pending.player); persistAndRender(); }, delay);
+    if (pending) cpuTimer = setTimeout(() => { CPU.cpuDiscardOne(game, pending.player, seatLevel(pending.player)); persistAndRender(); }, delay);
     return;
   }
   if (game.phase === 'encounter') {
     const enc = game.encounter;
     if (enc && enc.pending && isCpuSeat(enc.idx)) {
-      cpuTimer = setTimeout(() => { CPU.cpuResolveEncounter(game); persistAndRender(); }, delay);
+      cpuTimer = setTimeout(() => { CPU.cpuResolveEncounter(game, seatLevel(enc.idx)); persistAndRender(); }, delay);
     }
     return;
   }
@@ -257,18 +272,18 @@ function scheduleCpu() {
   }
   if (game.phase === 'galacticFund') {
     const pending = game.pendingGalacticFund.find((d) => isCpuSeat(d.player));
-    if (pending) cpuTimer = setTimeout(() => { E.resolveGalacticFund(game, pending.player, E.RESOURCES[Math.floor(Math.random() * E.RESOURCES.length)]); persistAndRender(); }, delay);
+    if (pending) cpuTimer = setTimeout(() => { E.resolveGalacticFund(game, pending.player, CPU.galacticFundResourceFor(game, pending.player, seatLevel(pending.player))); persistAndRender(); }, delay);
     return;
   }
   const idx = E.currentPlayer(game);
   if (isHumanSeat(idx)) return; // 人の番・人の選ぶ場面は画面の操作を待つ
-  if (game.phase.startsWith('setup')) { cpuTimer = setTimeout(() => { CPU.cpuSetupTurn(game); persistAndRender(); }, delay); return; }
-  if (game.phase === 'steal') { cpuTimer = setTimeout(() => { CPU.cpuResolveSteal(game); persistAndRender(); }, delay); return; }
+  if (game.phase.startsWith('setup')) { cpuTimer = setTimeout(() => { CPU.cpuSetupTurn(game, seatLevel(idx)); persistAndRender(); }, delay); return; }
+  if (game.phase === 'steal') { cpuTimer = setTimeout(() => { CPU.cpuResolveSteal(game, seatLevel(idx)); persistAndRender(); }, delay); return; }
   if (game.phase === 'roll') { cpuTimer = setTimeout(() => { E.rollDice(game); persistAndRender(); }, delay); return; }
   if (game.phase === 'main' || game.phase === 'flight') {
     cpuTimer = setTimeout(() => {
-      CPU.cpuPlayMainPhase(game);
-      if (game.phase !== 'gameOver') CPU.cpuPlayFlight(game);
+      CPU.cpuPlayMainPhase(game, seatLevel(idx), opponentLevelFor);
+      if (game.phase !== 'gameOver') CPU.cpuPlayFlight(game, seatLevel(idx));
       if (game.phase !== 'gameOver') E.endTurn(game);
       persistAndRender();
     }, delay);
@@ -620,7 +635,7 @@ function renderBankTradePanel() {
       const otherIdx = d.other;
       if (isCpuSeat(otherIdx)) {
         // CPUが相手のときは、成立させる前に受けるか断るかを決める（人の手札は見ず、今回の内容だけで判断）
-        if (CPU.acceptTrade(game, otherIdx, pGive, pGet)) {
+        if (CPU.acceptTrade(game, otherIdx, pGive, pGet, seatLevel(otherIdx))) {
           E.playerTrade(game, otherIdx, pGive, pGet);
           game.log.push(`${E.playerName(game, otherIdx)}が交易を受けました`);
         } else {
