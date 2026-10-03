@@ -5,7 +5,8 @@
 // 音を鳴らすべきことは game.events に積む。鳴らすかどうかは main.js が決める。
 //
 // 盤・発展カードの作り・交易の形などは ~/GitHub/tof/apps/catan/engine.js から書き方を写した（import はしない）。
-// 遭遇（3.8、自前の20枚）は作業2で入れた。友好カードは作業3まで入れない（仕様 docs/private/specs/catan-starfarers.md の8章）。
+// 遭遇（3.8、自前の20枚）は作業2で入れた。友好カード20枚（規7章の型、文面は自分の言葉）は作業3aで入れた
+// （仕様 docs/private/specs/catan-starfarers.md の8章。3b・相手との交易は別作業）。
 
 export const RESOURCES = ['ore', 'fuel', 'carbon', 'food', 'goods'];
 export const RESOURCE_LABEL = { ore: '鉱石', fuel: '燃料', carbon: '炭素', food: '食料', goods: '商品' };
@@ -69,6 +70,35 @@ export const ENCOUNTERS = [
   { id: 'E8', name: '迷子の交易船', count: 2, kind: 'yesno', prompt: '迷子の交易船を見つけた。引き取る？' },
   { id: 'E9', name: '摩耗', count: 2, kind: 'all', prompt: '母船のあちこちがすり減っている…' },
 ];
+
+// ---- 3.9・規7章: 友好カード20枚（4種族×5枚。文面は自分の言葉で書いた。公式の型だけを借りる） ----
+export const RACES = ['greenFolk', 'diplomat', 'merchant', 'scientist'];
+export const RACE_LABEL = { greenFolk: '緑の民', diplomat: '外交官', merchant: '商人', scientist: '科学者' };
+export const FRIEND_CARDS = [
+  ...RESOURCES.map((r) => ({
+    id: `green_${r}`, race: 'greenFolk', kind: 'bonusYield', res: r,
+    name: `${RESOURCE_LABEL[r]}好きの民`, desc: `産出で${RESOURCE_LABEL[r]}を1枚以上もらえたら、さらに1枚`,
+  })),
+  { id: 'dip_tribute', race: 'diplomat', kind: 'reducedTribute', name: '顔の広い外交官', desc: '7のとき、手札13枚以上のときだけ半分捨てる（ふつうは8枚以上）' },
+  { id: 'dip_fame_1', race: 'diplomat', kind: 'fameForSale', name: '名声の仲買人', desc: '自分の手番、商品1→名声1。手番に1回まで' },
+  { id: 'dip_fame_2', race: 'diplomat', kind: 'fameForSale', name: '名声の仲買人', desc: '自分の手番、商品1→名声1。手番に1回まで' },
+  { id: 'dip_help', race: 'diplomat', kind: 'helpingHand', name: '困ったときの仲介', desc: '自分より点の多い相手が2人以上いるとき、2人までの手札から1枚ずつランダムに取る。手番に1回まで' },
+  { id: 'dip_relief', race: 'diplomat', kind: 'galacticFund', name: '非常用の蓄え', desc: '産出（7を除く）で1枚ももらえなかったとき、好きな資源1枚' },
+  ...['ore', 'fuel', 'carbon', 'food'].map((r) => ({
+    id: `merch_${r}`, race: 'merchant', kind: 'exchange21', res: r,
+    name: `${RESOURCE_LABEL[r]}の仲買`, desc: `${RESOURCE_LABEL[r]}2→好きな資源1。何度でも`,
+  })),
+  { id: 'merch_goods', race: 'merchant', kind: 'exchange11goods', name: '商品の仲買', desc: '商品1→好きな資源1。手番に1回まで' },
+  { id: 'sci_cannon', race: 'scientist', kind: 'cannonBoost', amount: 2, name: '砲術の研究', desc: '戦闘力+2（摩耗で減らない）' },
+  { id: 'sci_booster', race: 'scientist', kind: 'boosterBoost', amount: 2, name: '推進の研究', desc: '速さ+2（摩耗で減らない）' },
+  { id: 'sci_combo_1', race: 'scientist', kind: 'comboBoost', speed: 1, cannon: 1, name: '複合技術', desc: '速さ+1・戦闘力+1（摩耗で減らない）' },
+  { id: 'sci_combo_2', race: 'scientist', kind: 'comboBoost', speed: 1, cannon: 1, name: '複合技術', desc: '速さ+1・戦闘力+1（摩耗で減らない）' },
+  { id: 'sci_combo_3', race: 'scientist', kind: 'comboBoost', speed: 1, cannon: 1, name: '複合技術', desc: '速さ+1・戦闘力+1（摩耗で減らない）' },
+];
+function friendCardDefs(p) { return (p.friendCards || []).map((id) => FRIEND_CARDS.find((c) => c.id === id)).filter(Boolean); }
+export function hasFriendCard(p, kind, res) { return friendCardDefs(p).some((c) => c.kind === kind && (res == null || c.res === res)); }
+function speedBonusFromCards(p) { return friendCardDefs(p).reduce((a, c) => a + (c.kind === 'boosterBoost' ? c.amount : c.kind === 'comboBoost' ? c.speed : 0), 0); }
+export function combatBonusFromCards(p) { return friendCardDefs(p).reduce((a, c) => a + (c.kind === 'cannonBoost' ? c.amount : c.kind === 'comboBoost' ? c.cannon : 0), 0); }
 
 const HEX_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 
@@ -261,6 +291,13 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
     // kind==='empty'（何もない宇宙）は真ん中も通れる。plainのままでよい
   });
 
+  // 3.9・規7章: 前哨基地4つに種族を1つずつランダムに割り振り、友好カード5枚ずつを残り札として持たせる
+  const racesShuffled = shuffle(RACES, rng);
+  shuffle(sectors.filter((s) => s.kind === 'outpost'), rng).forEach((s, i) => {
+    s.race = racesShuffled[i];
+    s.friendCardsLeft = FRIEND_CARDS.filter((c) => c.race === s.race).map((c) => c.id);
+  });
+
   // 3人のとき: カタンの植民地12か所のうち9か所(=3人×3周)が埋まるよう、3つの惑星系に1か所ずつふさぐ（13章・6番）
   if (playerCount === 3) {
     const colonySectors = shuffle(sectors.filter((s) => s.tier === 'colony'), rng).slice(0, 3);
@@ -285,6 +322,8 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
     fame: 0,
     tokens: [], // 片付けた海賊・氷 { kind, strength }
     tradeShipMarkers: 0, // 遭遇でもらったのに置けなかった交易船（3.8 E8。空いたら置く）
+    friendCards: [], // 友好カードのid（3.9）
+    oncePerTurn: { fameForSale: false, helpingHand: false, exchange11goods: false }, // 手番に1回までの友好カード（3.9・規7章）
   }));
 
   const firstPlayer = Math.floor(rng() * playerCount);
@@ -297,11 +336,11 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
   RESOURCES.forEach((r) => { bank[r] = RESOURCE_TOTAL - RESERVE_START_PER; });
 
   const game = {
-    rulesVersion: 1,
+    rulesVersion: 2,
     playerCount, players, board,
     bank, reserve, reserveDiscs: shuffle(RESERVE_DISC_POOL, rng),
     bonusPool: { booster: 2, cannon: 1, pod: 1 },
-    // setupColony → setupPort → roll → discard → steal → main → flight → encounter → encounterWear → gameOver
+    // setupColony → setupPort → roll → discard → steal → main → flight → encounter → encounterWear → friendship → galacticFund → gameOver
     phase: 'setupColony',
     firstPlayer,
     setupSequence, setupPos: 0,
@@ -311,6 +350,8 @@ export function createGame(playerCount, rng = Math.random, options = {}) {
     encounterDeck: freshEncounterDeck(rng), encounterDiscard: [], encounter: null, encounterBalls: null,
     frozenShipId: null,
     pendingWear: [], pendingWearDiscards: [], // 摩耗（E9）: 同数で本人が選ぶ／8枚以上で1枚捨てる
+    pendingFriendship: null, // { player, sectorId, returnPhase }（3.9: 交易所を建てたときのカード選び）
+    pendingGalacticFund: [], // [{ player }]（3.9・銀河救援基金）
     nextShipSeq: 0,
     winner: null,
     events: [], log: [],
@@ -540,16 +581,25 @@ function distributeResources(game, total) {
       demand[hex.resource] += 1;
     });
   });
+  const got = new Set(); // 3.9: このロールで何か1枚でももらえた人（緑の民・銀河救援基金の判定に使う）
   RESOURCES.forEach((res) => {
     if (demand[res] === 0) return;
     if (demand[res] > game.bank[res]) { fire(game, 'shortage'); return; } // 誰ももらえない
+    const recipients = new Set();
     contributions.filter((c) => c.res === res).forEach((c) => {
       game.players[c.player].resources[res]++;
       game.bank[res]--;
+      recipients.add(c.player);
+    });
+    recipients.forEach((pi) => {
+      got.add(pi);
+      const p = game.players[pi];
+      if (hasFriendCard(p, 'bonusYield', res) && game.bank[res] > 0) { p.resources[res]++; game.bank[res]--; } // 緑の民: その資源を1枚以上もらったら+1
     });
   });
+  return got;
 }
-function discardThreshold() { return 8; } // 作業1では友好カード無し（外交官のカードで変わるのは作業3）
+function discardThresholdFor(p) { return hasFriendCard(p, 'reducedTribute') ? 13 : 8; } // 外交官「減らされた貢ぎ物」
 export function rollDice(game, rng = Math.random) {
   if (game.phase !== 'roll') return null;
   const d1 = 1 + Math.floor(rng() * 6);
@@ -560,16 +610,27 @@ export function rollDice(game, rng = Math.random) {
   log(game, `サイコロ: ${d1} + ${d2} = ${total}`);
   if (total === 7) {
     game.pendingDiscards = game.players
-      .filter((p) => sumRes(p.resources) >= discardThreshold())
+      .filter((p) => sumRes(p.resources) >= discardThresholdFor(p))
       .map((p) => ({ player: p.idx, count: Math.floor(sumRes(p.resources) / 2) }));
     game.phase = game.pendingDiscards.length ? 'discard' : resolveAfterSeven(game);
   } else {
-    distributeResources(game, total);
+    const got = distributeResources(game, total);
     const idx = currentPlayer(game);
     drawReserve(game, idx, reserveDrawCountFor(playerScore(game, idx)));
-    game.phase = 'main';
+    // 外交官「銀河救援基金」: 7以外でこのロールで1枚ももらえなかった人が、好きな資源1枚
+    game.pendingGalacticFund = game.players.filter((p) => !got.has(p.idx) && hasFriendCard(p, 'galacticFund')).map((p) => ({ player: p.idx }));
+    game.phase = game.pendingGalacticFund.length ? 'galacticFund' : 'main';
   }
   return total;
+}
+export function resolveGalacticFund(game, playerIdx, res) {
+  if (game.phase !== 'galacticFund') return false;
+  if (!game.pendingGalacticFund.find((d) => d.player === playerIdx)) return false;
+  if (!RESOURCES.includes(res)) return false;
+  if (game.bank[res] > 0) { game.bank[res]--; game.players[playerIdx].resources[res]++; }
+  game.pendingGalacticFund = game.pendingGalacticFund.filter((d) => d.player !== playerIdx);
+  if (!game.pendingGalacticFund.length) game.phase = 'main';
+  return true;
 }
 export function discardCards(game, playerIdx, discardObj) {
   const pending = game.pendingDiscards.find((d) => d.player === playerIdx);
@@ -618,16 +679,68 @@ export function resolveSteal(game, targetIdx) {
 // ================================================================
 // 交易・建設（3.9・4章・11章）
 // ================================================================
-function rateFor(res) { return res === 'goods' ? 2 : 3; }
+function rateFor(p, res) { return hasFriendCard(p, 'exchange21', res) ? 2 : (res === 'goods' ? 2 : 3); } // 商人の交換カードで率が良くなる
 export function bankTrade(game, giveRes, wantRes) {
   if (game.phase !== 'main') return false;
   const idx = currentPlayer(game);
   const p = game.players[idx];
-  const rate = rateFor(giveRes);
+  const rate = rateFor(p, giveRes);
   if ((p.resources[giveRes] || 0) < rate) return false;
   if (game.bank[wantRes] <= 0) return false;
   p.resources[giveRes] -= rate; game.bank[giveRes] += rate;
   p.resources[wantRes]++; game.bank[wantRes]--;
+  fire(game, 'trade');
+  return true;
+}
+// 外交官「名声の売り物」: 商品1→名声1。手番に1回（2枚持っていても1回）
+export function buyFameWithGoods(game) {
+  if (game.phase !== 'main') return false;
+  const idx = currentPlayer(game); const p = game.players[idx];
+  if (!hasFriendCard(p, 'fameForSale') || p.oncePerTurn.fameForSale) return false;
+  if ((p.resources.goods || 0) < 1) return false;
+  p.resources.goods--; game.bank.goods++;
+  gainFame(p, 1);
+  p.oncePerTurn.fameForSale = true;
+  fire(game, 'trade');
+  checkWin(game, idx);
+  return true;
+}
+// 商人「商品1:1」: 商品1→好きな資源1。手番に1回
+export function merchantGoodsExchange(game, wantRes) {
+  if (game.phase !== 'main') return false;
+  const idx = currentPlayer(game); const p = game.players[idx];
+  if (!hasFriendCard(p, 'exchange11goods') || p.oncePerTurn.exchange11goods) return false;
+  if ((p.resources.goods || 0) < 1 || wantRes === 'goods') return false;
+  if (game.bank[wantRes] <= 0) return false;
+  p.resources.goods--; game.bank.goods++;
+  p.resources[wantRes]++; game.bank[wantRes]--;
+  p.oncePerTurn.exchange11goods = true;
+  fire(game, 'trade');
+  return true;
+}
+// 外交官「助けの手」: 自分より点の多い相手が2人以上いるときだけ使える。手番に1回
+export function helpingHandTargets(game) {
+  if (game.phase !== 'main') return [];
+  const idx = currentPlayer(game); const p = game.players[idx];
+  if (!hasFriendCard(p, 'helpingHand') || p.oncePerTurn.helpingHand) return [];
+  const myScore = playerScore(game, idx);
+  const richer = game.players.filter((o) => o.idx !== idx && playerScore(game, o.idx) > myScore).map((o) => o.idx);
+  return richer.length >= 2 ? richer : [];
+}
+export function helpingHandSteal(game, targets, rng = Math.random) {
+  const idx = currentPlayer(game); const p = game.players[idx];
+  const avail = helpingHandTargets(game);
+  if (!avail.length) return false;
+  const chosen = targets.filter((t) => avail.includes(t)).slice(0, 2);
+  if (!chosen.length) return false;
+  chosen.forEach((t) => {
+    const op = game.players[t];
+    const pool = RESOURCES.flatMap((r) => Array(op.resources[r]).fill(r));
+    if (!pool.length) return;
+    const picked = pool[Math.floor(rng() * pool.length)];
+    op.resources[picked]--; p.resources[picked]++;
+  });
+  p.oncePerTurn.helpingHand = true;
   fire(game, 'trade');
   return true;
 }
@@ -771,7 +884,29 @@ export function buildTradeStationAt(game, shipId) {
   }
   log(game, `${playerName(game, player.idx)} が交易所を建てた`);
   fire(game, 'build');
+  offerFriendshipCard(game, player.idx, sector);
   checkWin(game, player.idx);
+  return true;
+}
+// 3.9: 交易所を建てたら、その前哨基地の種族の残りカードから1枚選ぶ（人は画面、CPUは自動）。
+// 選ぶ間は game.phase='friendship' で止まる。ponytail: 同時に2つ目の選びが重ならない前提（UIがcanAnytimeで二重建築を防ぐ）。
+function offerFriendshipCard(game, idx, sector) {
+  if (!sector.friendCardsLeft || !sector.friendCardsLeft.length || game.pendingFriendship) return;
+  game.pendingFriendship = { player: idx, sectorId: sector.id, returnPhase: game.phase };
+  game.phase = 'friendship';
+}
+export function pickFriendshipCard(game, cardId) {
+  if (game.phase !== 'friendship' || !game.pendingFriendship) return false;
+  const { player: idx, sectorId, returnPhase } = game.pendingFriendship;
+  const sector = game.board.sectors[sectorId];
+  if (!sector.friendCardsLeft.includes(cardId)) return false;
+  sector.friendCardsLeft = sector.friendCardsLeft.filter((id) => id !== cardId);
+  game.players[idx].friendCards.push(cardId);
+  game.pendingFriendship = null;
+  game.phase = returnPhase;
+  log(game, `${playerName(game, idx)} が友好カード「${FRIEND_CARDS.find((c) => c.id === cardId).name}」を得た`);
+  fire(game, 'friend');
+  checkWin(game, idx);
   return true;
 }
 
@@ -782,14 +917,15 @@ export function canFly(game) {
   if (game.phase !== 'main') return false;
   return game.players[currentPlayer(game)].ships.length > 0;
 }
-export function speedFromPicks(picks, boosters) {
+// boosters/cannons は player オブジェクトを渡す（科学者の友好カードの+分も足す。3.9）
+export function speedFromPicks(picks, player) {
   const black = picks.includes('k');
   const base = black ? BASE_SPEED_ON_BLACK : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
-  return base + boosters;
+  return base + player.boosters + speedBonusFromCards(player);
 }
-export function combatFromPicks(picks, cannons) {
+export function combatFromPicks(picks, player) {
   const base = picks.includes('k') ? 0 : (BALL_VALUE[picks[0]] + BALL_VALUE[picks[1]]);
-  return base + cannons;
+  return base + player.cannons + combatBonusFromCards(player);
 }
 export function shakeMothership(game, rng = Math.random) {
   if (game.phase !== 'main') return null;
@@ -797,7 +933,7 @@ export function shakeMothership(game, rng = Math.random) {
   if (p.ships.length === 0) return null;
   const picks = shuffle(BALLS, rng).slice(0, 2);
   const black = picks.includes('k');
-  const speed = speedFromPicks(picks, p.boosters);
+  const speed = speedFromPicks(picks, p);
   game.ballsShown = picks; game.speed = speed;
   p.ships.forEach((s) => { s.movesLeft = speed; });
   fire(game, 'shake');
@@ -820,7 +956,7 @@ function onShipArrive(game, idx, vertexId) {
     const hex = game.board.hexes[hId];
     if (!hex.disc || !hex.disc.token) return;
     const { kind, strength } = hex.disc.token;
-    const have = kind === 'pirate' ? player.cannons : player.pods;
+    const have = kind === 'pirate' ? player.cannons + combatBonusFromCards(player) : player.pods; // 科学者の大砲も海賊の条件に入る（3.9）
     if (have < strength) return;
     player.tokens.push({ kind, strength });
     hex.disc.token = null;
@@ -972,7 +1108,7 @@ function jumpPickOrAuto(game, enc) {
 function doFight(game, enc, rng = Math.random) {
   const a = game.players[enc.idx], b = game.players[enc.rightIdx];
   const pa = shuffle(BALLS, rng).slice(0, 2), pb = shuffle(BALLS, rng).slice(0, 2);
-  const ca = combatFromPicks(pa, a.cannons), cb = combatFromPicks(pb, b.cannons);
+  const ca = combatFromPicks(pa, a), cb = combatFromPicks(pb, b);
   game.encounterBalls = { a: pa, b: pb, aIdx: enc.idx, bIdx: enc.rightIdx };
   const win = ca >= cb; // 公式どおり同点は仕掛けた本人の勝ち
   log(game, `戦い: ${playerName(game, enc.idx)}(${ca}) 対 ${playerName(game, enc.rightIdx)}(${cb}) → ${win ? '勝ち' : '負け'}`);
@@ -982,7 +1118,7 @@ function doFight(game, enc, rng = Math.random) {
 function doSpeedCompare(game, enc, rng = Math.random) {
   const a = game.players[enc.idx], b = game.players[enc.rightIdx];
   const pa = shuffle(BALLS, rng).slice(0, 2), pb = shuffle(BALLS, rng).slice(0, 2);
-  const sa = speedFromPicks(pa, a.boosters), sb = speedFromPicks(pb, b.boosters);
+  const sa = speedFromPicks(pa, a), sb = speedFromPicks(pb, b);
   game.encounterBalls = { a: pa, b: pb, aIdx: enc.idx, bIdx: enc.rightIdx };
   const win = sa >= sb; // 相手が大きければ負け（同じなら負けない）
   log(game, `速さ比べ: ${playerName(game, enc.idx)}(${sa}) 対 ${playerName(game, enc.rightIdx)}(${sb}) → ${win ? '勝ち' : '負け'}`);
@@ -1091,7 +1227,7 @@ function answerYesNo(game, enc, yes, rng) {
       if (yes) {
         const picks = shuffle(BALLS, rng).slice(0, 2);
         game.encounterBalls = { a: picks, b: null, aIdx: enc.idx, bIdx: null };
-        const combat = combatFromPicks(picks, p.cannons);
+        const combat = combatFromPicks(picks, p);
         if (combat >= 4) enc.pending = { kind: 'pickUpgrade' };
         else shipPickOrAuto(game, enc);
       } else finishEncounter(game);
@@ -1183,5 +1319,6 @@ export function endTurn(game) {
   game.turn = (game.turn + 1) % game.playerCount;
   game.turnNumber++;
   game.phase = 'roll';
+  game.players[game.turn].oncePerTurn = { fameForSale: false, helpingHand: false, exchange11goods: false }; // 3.9: 手番1回系をリセット
   return true;
 }

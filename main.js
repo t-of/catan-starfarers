@@ -89,6 +89,7 @@ const els = {
   handCount: document.getElementById('handCount'),
   handBar: document.getElementById('handBar'),
   upgradeBar: document.getElementById('upgradeBar'),
+  friendBar: document.getElementById('friendBar'),
   buildGrid: document.getElementById('buildGrid'),
   actionBar: document.getElementById('actionBar'),
   diceBtn: document.getElementById('diceBtn'),
@@ -168,16 +169,15 @@ let ui = { mode: 'idle', selectedShip: null, data: {} };
 let turnPassAckKey = null; // 最後に「はじめる」を押した合図（これと違えば渡す画面を出す）
 
 function migrateGame(g) {
-  if (!g || g.rulesVersion !== 1) return null; // 試作のあいだは形が大きく違えば消す（9章）
-  // 作業2（遭遇・名声）で足したフィールドは、作業1の古い保存にも補って引き継ぐ
-  if (!g.encounterDeck) g.encounterDeck = E.freshEncounterDeck(Math.random);
-  if (!g.encounterDiscard) g.encounterDiscard = [];
-  if (g.encounter === undefined) g.encounter = null;
-  if (g.encounterBalls === undefined) g.encounterBalls = null;
-  if (g.frozenShipId === undefined) g.frozenShipId = null;
-  if (!g.pendingWear) g.pendingWear = [];
-  if (!g.pendingWearDiscards) g.pendingWearDiscards = [];
-  g.players.forEach((p) => { if (p.tradeShipMarkers == null) p.tradeShipMarkers = 0; });
+  if (!g || g.rulesVersion !== 2) return null; // 試作のあいだは形が大きく違えば消す（9章）。作業3aでrulesVersionを2に上げた
+  // 保険: 作業3a以降に足したフィールドが欠けていたら補う
+  if (g.pendingFriendship === undefined) g.pendingFriendship = null;
+  if (!g.pendingGalacticFund) g.pendingGalacticFund = [];
+  g.players.forEach((p) => {
+    if (p.tradeShipMarkers == null) p.tradeShipMarkers = 0;
+    if (!p.friendCards) p.friendCards = [];
+    if (!p.oncePerTurn) p.oncePerTurn = { fameForSale: false, helpingHand: false, exchange11goods: false };
+  });
   return g;
 }
 
@@ -246,6 +246,11 @@ function scheduleCpu() {
     if (targetPlayer != null && isCpuSeat(targetPlayer)) {
       cpuTimer = setTimeout(() => { CPU.cpuResolveWearOne(game); persistAndRender(); }, delay);
     }
+    return;
+  }
+  if (game.phase === 'galacticFund') {
+    const pending = game.pendingGalacticFund.find((d) => isCpuSeat(d.player));
+    if (pending) cpuTimer = setTimeout(() => { E.resolveGalacticFund(game, pending.player, E.RESOURCES[Math.floor(Math.random() * E.RESOURCES.length)]); persistAndRender(); }, delay);
     return;
   }
   const idx = E.currentPlayer(game);
@@ -358,6 +363,16 @@ function renderHand() {
     <span><b>${p.boosters}</b>ブースター（速さ+${p.boosters}）</span>
     <span><b>${p.cannons}</b>大砲（戦闘力+${p.cannons}）</span>
     <span><b>${p.pods}</b>貨物ポッド</span>`;
+  renderFriendCards(p);
+}
+// 3.9: もっている友好カードと効き目を小さな札で見せる
+function renderFriendCards(p) {
+  if (!p.friendCards.length) { els.friendBar.innerHTML = ''; return; }
+  els.friendBar.innerHTML = p.friendCards.map((id) => {
+    const c = E.FRIEND_CARDS.find((x) => x.id === id);
+    if (!c) return '';
+    return `<div class="friend-chip"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.desc)}</small></div>`;
+  }).join('');
 }
 
 function costText(cost) { return Object.entries(cost).map(([r, n]) => `${E.RESOURCE_LABEL[r]}${n}`).join(' '); }
@@ -378,6 +393,9 @@ function renderBuildGrid() {
     { key: 'pod', label: '貨物ポッド', cost: E.COSTS.pod, ok: canMain && p.pods < E.MAX_PODS && canAfford(p.resources, E.COSTS.pod) },
     { key: 'buildColony', label: '植民地を建てる（着いた船で）', cost: {}, ok: canAnytime && p.ships.some((s) => E.canBuildColonyAt(game, s.id)) },
     { key: 'buildTradeStation', label: '交易所を建てる（着いた船で）', cost: {}, ok: canAnytime && p.ships.some((s) => E.canBuildTradeStationAt(game, s.id)) },
+    { key: 'fameForSale', label: '商品→名声（友好カード）', cost: { goods: 1 }, ok: canMain && E.hasFriendCard(p, 'fameForSale') && !p.oncePerTurn.fameForSale && p.resources.goods >= 1 },
+    { key: 'goodsExchange', label: '商品→好きな資源（友好カード）', cost: { goods: 1 }, ok: canMain && E.hasFriendCard(p, 'exchange11goods') && !p.oncePerTurn.exchange11goods && p.resources.goods >= 1 },
+    { key: 'helpingHand', label: '助けの手（友好カード）', cost: {}, ok: canMain && E.helpingHandTargets(game).length >= 2 },
   ];
   els.buildGrid.innerHTML = '';
   defs.forEach((d) => {
@@ -393,6 +411,9 @@ function renderBuildGrid() {
       if (d.key === 'booster' || d.key === 'cannon' || d.key === 'pod') { E.buyUpgrade(game, d.key); persistAndRender(); return; }
       if (d.key === 'buildColony') { const s = p.ships.find((x) => E.canBuildColonyAt(game, x.id)); if (s) { E.buildColonyAt(game, s.id); ui.selectedShip = null; persistAndRender(); } return; }
       if (d.key === 'buildTradeStation') { const s = p.ships.find((x) => E.canBuildTradeStationAt(game, x.id)); if (s) { E.buildTradeStationAt(game, s.id); ui.selectedShip = null; persistAndRender(); } return; }
+      if (d.key === 'fameForSale') { E.buyFameWithGoods(game); persistAndRender(); return; }
+      if (d.key === 'goodsExchange') { ui.mode = 'pickGoodsExchange'; renderAll(); return; }
+      if (d.key === 'helpingHand') { ui.mode = 'pickHelpingHand'; ui.data = { picked: [] }; renderAll(); return; }
     });
     els.buildGrid.appendChild(btn);
   });
@@ -414,6 +435,8 @@ function phaseHint(idx) {
       return `${name}が遭遇中…`;
     }
     case 'encounterWear': return '摩耗：みんなの母船がすり減る…';
+    case 'friendship': return `${E.playerName(game, game.pendingFriendship.player)}が友好カードを選んでいます…`;
+    case 'galacticFund': return '銀河救援基金：もらえなかった人が資源を選んでいます…';
     case 'gameOver': return `${E.playerName(game, game.winner)} の勝ち！`;
     default: return '';
   }
@@ -569,6 +592,51 @@ function renderBankTradePanel() {
     cancel: () => { ui.mode = 'idle'; ui.data = {}; renderAll(); },
   });
 }
+// 3.9: 交易所を建てたときの友好カード選び
+function renderFriendshipPanel() {
+  const { player: idx, sectorId } = game.pendingFriendship;
+  const sector = game.board.sectors[sectorId];
+  els.panel.innerHTML = `<h2>${E.playerName(game, idx)}: 友好カードを1枚選ぶ（${E.RACE_LABEL[sector.race]}）</h2>`
+    + sector.friendCardsLeft.map((id) => {
+      const c = E.FRIEND_CARDS.find((x) => x.id === id);
+      return `<button class="card-btn" data-act="pick" data-id="${id}"><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.desc)}</small></button>`;
+    }).join('');
+  bindPanel({ pick: (b) => { E.pickFriendshipCard(game, b.dataset.id); persistAndRender(); } });
+}
+// 外交官「銀河救援基金」: 産出で1枚ももらえなかった人が、好きな資源1枚
+function renderGalacticFundPanel(d) {
+  els.panel.innerHTML = `<h2>${E.playerName(game, d.player)}: 銀河救援基金（好きな資源1枚）</h2>
+    <div class="res-pick">${E.RESOURCES.map((r) => `<button data-act="res" data-r="${r}" ${game.bank[r] <= 0 ? 'disabled' : ''}>${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>`;
+  bindPanel({ res: (b) => { E.resolveGalacticFund(game, d.player, b.dataset.r); persistAndRender(); } });
+}
+// 商人「商品1:1」の交換先を選ぶ
+function renderGoodsExchangePanel() {
+  els.panel.innerHTML = `<h2>商品1→好きな資源1（友好カード・手番に1回）</h2>
+    <div class="res-pick">${E.RESOURCES.filter((r) => r !== 'goods').map((r) => `<button data-act="res" data-r="${r}" ${game.bank[r] <= 0 ? 'disabled' : ''}>${E.RESOURCE_LABEL[r]}</button>`).join('')}</div>
+    <button class="ghost-btn" data-act="cancel">やめる</button>`;
+  bindPanel({
+    res: (b) => { E.merchantGoodsExchange(game, b.dataset.r); ui.mode = 'idle'; persistAndRender(); },
+    cancel: () => { ui.mode = 'idle'; renderAll(); },
+  });
+}
+// 外交官「助けの手」: 自分より点の多い相手から2人まで選ぶ
+function renderHelpingHandPanel() {
+  const targets = E.helpingHandTargets(game);
+  const picked = ui.data.picked || (ui.data.picked = []);
+  els.panel.innerHTML = `<h2>助けの手: 2人まで選ぶ（友好カード）</h2>`
+    + targets.map((t) => `<button class="card-btn${picked.includes(t) ? ' is-selected' : ''}" data-act="toggle" data-t="${t}">${escapeHtml(E.playerName(game, t))}</button>`).join('')
+    + `<button class="btn btn--accent" data-act="confirm" ${picked.length ? '' : 'disabled'}>取る</button>
+       <button class="ghost-btn" data-act="cancel">やめる</button>`;
+  bindPanel({
+    toggle: (b) => {
+      const t = Number(b.dataset.t);
+      ui.data.picked = picked.includes(t) ? picked.filter((x) => x !== t) : (picked.length < 2 ? [...picked, t] : picked);
+      renderAll();
+    },
+    confirm: () => { E.helpingHandSteal(game, ui.data.picked); ui.mode = 'idle'; ui.data = {}; persistAndRender(); },
+    cancel: () => { ui.mode = 'idle'; ui.data = {}; renderAll(); },
+  });
+}
 function renderResultPanel() {
   const idx = game.winner;
   const p = game.players[idx];
@@ -610,7 +678,18 @@ function renderOverlay() {
     if (d) { if (isHumanSeat(d.player)) { openPanel(); renderWearDiscardPanel(d); return; } closePanel(); return; }
     closePanel(); return;
   }
+  if (game.phase === 'friendship') {
+    if (isHumanSeat(game.pendingFriendship.player)) { openPanel(); renderFriendshipPanel(); return; }
+    closePanel(); return;
+  }
+  if (game.phase === 'galacticFund') {
+    const d = game.pendingGalacticFund.find((x) => isHumanSeat(x.player));
+    if (d) { openPanel(); renderGalacticFundPanel(d); return; }
+    closePanel(); return;
+  }
   if (ui.mode === 'bankTrade') { openPanel(); renderBankTradePanel(); return; }
+  if (ui.mode === 'pickGoodsExchange') { openPanel(); renderGoodsExchangePanel(); return; }
+  if (ui.mode === 'pickHelpingHand') { openPanel(); renderHelpingHandPanel(); return; }
   closePanel();
 }
 

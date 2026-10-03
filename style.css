@@ -131,6 +131,10 @@ button { font: inherit; color: inherit; }
 .upgrades { display: flex; gap: 6px; margin-top: 8px; font-size: 11px; color: var(--muted); }
 .upgrades span { flex: 1; text-align: center; }
 .upgrades b { display: block; color: var(--fg); font-size: 14px; }
+.friend-cards { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.friend-chip { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--btn-edge); font-size: 11px; max-width: 100%; }
+.friend-chip b { font-size: 12px; }
+.friend-chip small { color: var(--muted); }
 
 .builds { display: flex; flex-direction: column; gap: 6px; }
 .build-btn { min-height: 44px; padding: 8px 10px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--btn-bg); border: 1px solid var(--btn-edge); font-size: 13px; text-align: left; }

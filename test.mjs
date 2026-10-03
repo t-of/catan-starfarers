@@ -414,6 +414,183 @@ test('遭遇の山が尽きたら捨て札を混ぜ直す', () => {
   assert.ok(g.encounter); // 止まらず次の遭遇が始まる
 });
 
+// ---- 作業3a: 友好カード20枚（規7章・仕様3.9）----
+
+test('交易所を建てたら、その種族の友好カードから1枚選べる', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const outpost = g.board.sectors.find((s) => s.kind === 'outpost');
+  assert.equal(outpost.friendCardsLeft.length, 5); // 建てる前は5枚とも残っている
+  p.pods = 1;
+  g.phase = 'main';
+  const ship = { id: 'friend-ship', kind: 'trade', vertexId: outpost.centerVertexId, movesLeft: 0 };
+  p.ships.push(ship);
+  assert.ok(E.buildTradeStationAt(g, 'friend-ship'));
+  assert.equal(g.phase, 'friendship'); // 選ぶまで止まる
+  assert.equal(g.pendingFriendship.player, idx);
+  const cardId = outpost.friendCardsLeft[0];
+  assert.ok(E.pickFriendshipCard(g, cardId));
+  assert.equal(g.phase, 'main'); // 建てたときの phase に戻る
+  assert.ok(p.friendCards.includes(cardId));
+  assert.equal(outpost.friendCardsLeft.includes(cardId), false);
+  assert.equal(outpost.friendCardsLeft.length, 4);
+});
+
+test('緑の民の+1は、その資源を1枚以上もらったときだけ', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const colonyV = g.board.vertices[p.colonies[0]];
+  const hex = colonyV.hexIds.map((id) => g.board.hexes[id]).find((h) => h.disc && h.disc.faceUp && h.disc.numbers);
+  assert.ok(hex, '産出が起きる資源があるはず');
+  p.friendCards = [`green_${hex.resource}`];
+  g.board.hexes = [hex]; // 他の惑星が同じロールで混ざらないよう、見るヘクスをこれ1つに絞る（他は盤の見た目に使わないのでテストのあいだだけ）
+  p.fame = 20; // 予備の山の引き分（点が低いほど増える）がこの資源に混ざらないよう、点を上げて引き分を0枚にする
+  const before = p.resources[hex.resource];
+  let total;
+  for (let i = 0; i < 1000; i++) {
+    g.phase = 'roll';
+    total = E.rollDice(g, Math.random);
+    if (hex.disc.numbers.includes(total)) break;
+  }
+  assert.ok(hex.disc.numbers.includes(total));
+  assert.equal(p.resources[hex.resource], before + 2); // ふつうの1枚＋カードで1枚
+});
+
+test('銀河救援基金は7のときは効かない', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['dip_relief'];
+  E.RESOURCES.forEach((r) => { p.resources[r] = 0; });
+  g.phase = 'roll';
+  let n = 0;
+  const rng7 = () => { n++; return n === 1 ? 0.4 : 0.55; }; // 合計7
+  const total = E.rollDice(g, rng7);
+  assert.equal(total, 7);
+  assert.notEqual(g.phase, 'galacticFund');
+  assert.equal(g.pendingGalacticFund.length, 0);
+});
+
+test('銀河救援基金は、7以外で1枚ももらえなかったときに効く', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['dip_relief'];
+  // 自分の植民地・宇宙港に接しない目（＝このプレイヤーが絶対に何ももらえない目）を探す
+  const ownedNumbers = new Set();
+  g.board.hexes.forEach((h) => {
+    if (!h.disc || !h.disc.faceUp || !h.disc.numbers) return;
+    if (h.vertexIds.some((vid) => { const v = g.board.vertices[vid]; return v.building && v.building.owner === idx; })) {
+      h.disc.numbers.forEach((n) => ownedNumbers.add(n));
+    }
+  });
+  const missNumber = [2, 3, 4, 5, 6, 8, 9, 10, 11, 12].find((n) => !ownedNumbers.has(n));
+  assert.ok(missNumber, 'テスト環境では見つかるはず');
+  let d1 = 1; while (missNumber - d1 < 1 || missNumber - d1 > 6) d1++;
+  const d2 = missNumber - d1;
+  const diceRng = (() => { const vals = [(d1 - 0.5) / 6, (d2 - 0.5) / 6]; let i = 0; return () => vals[i++]; })();
+  g.phase = 'roll';
+  const total = E.rollDice(g, diceRng);
+  assert.equal(total, missNumber);
+  assert.equal(g.phase, 'galacticFund'); // このロールの産出では1枚ももらえなかった（予備の山の引き分はここでは数えない）
+  const oreBefore = p.resources.ore; // ロール直後（予備の山の引き分を含む）から、基金ぶんの増え方だけを見る
+  assert.ok(E.resolveGalacticFund(g, idx, 'ore'));
+  assert.equal(g.phase, 'main');
+  assert.equal(p.resources.ore, oreBefore + 1);
+});
+
+test('助けの手は、点の多い相手が2人以上のときだけ使える', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['dip_help'];
+  g.phase = 'main';
+  assert.deepEqual(E.helpingHandTargets(g), []);
+  const others = g.players.filter((x) => x.idx !== idx);
+  others[0].fame = 10; // 1人だけ多くてもまだ使えない
+  assert.deepEqual(E.helpingHandTargets(g), []);
+  others[1].fame = 10; // 2人以上で使える
+  const targets = E.helpingHandTargets(g);
+  assert.ok(targets.length >= 2);
+  others[0].resources.ore = 2;
+  assert.ok(E.helpingHandSteal(g, [others[0].idx, others[1].idx]));
+  assert.equal(p.oncePerTurn.helpingHand, true);
+  assert.equal(E.helpingHandTargets(g).length, 0); // 同じ手番にもう1回は使えない
+});
+
+test('名声の売り物は、2枚持っていても手番に1回だけ', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['dip_fame_1', 'dip_fame_2'];
+  p.resources.goods = 5;
+  g.phase = 'main';
+  const fameBefore = p.fame;
+  assert.ok(E.buyFameWithGoods(g));
+  assert.equal(p.fame, fameBefore + 1);
+  assert.equal(E.buyFameWithGoods(g), false);
+  assert.equal(p.fame, fameBefore + 1);
+});
+
+test('商品1:1の交換も、手番に1回だけ', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['merch_goods'];
+  p.resources.goods = 5;
+  g.phase = 'main';
+  const oreBefore = p.resources.ore;
+  assert.ok(E.merchantGoodsExchange(g, 'ore'));
+  assert.equal(p.resources.ore, oreBefore + 1);
+  assert.equal(E.merchantGoodsExchange(g, 'ore'), false);
+});
+
+test('商人の交換カードは銀行交易の率を2:1にする', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  p.friendCards = ['merch_ore'];
+  p.resources.ore = 2; p.resources.fuel = 0;
+  g.phase = 'main';
+  assert.ok(E.bankTrade(g, 'ore', 'fuel'));
+  assert.equal(p.resources.ore, 0); // 2枚で交換できた（ふつうは3枚要る）
+  assert.equal(p.resources.fuel, 1);
+});
+
+test('科学者の大砲は海賊の条件に入り、摩耗で減らない', () => {
+  const g = E.createGame(4, Math.random);
+  doSetup(g);
+  const idx = E.currentPlayer(g);
+  const p = g.players[idx];
+  const pirateSector = g.board.sectors.find((s) => s.kind === 'system'
+    && s.hexIds.some((hId) => g.board.hexes[hId].disc.token && g.board.hexes[hId].disc.token.kind === 'pirate' && g.board.hexes[hId].disc.token.strength === 4));
+  assert.ok(pirateSector);
+  const pirateHexId = pirateSector.hexIds.find((hId) => g.board.hexes[hId].disc.token && g.board.hexes[hId].disc.token.strength === 4);
+  const target = pirateSector.siteVertexIds.find((v) => g.board.vertices[v].hexIds.includes(pirateHexId));
+  const ship = p.ships[0];
+  g.phase = 'flight';
+  p.cannons = 2; p.friendCards = ['sci_cannon']; // 大砲2＋カードの+2＝4で倒れる（大砲2だけでは倒れない）
+  ship.movesLeft = 500;
+  assert.ok(E.moveShip(g, ship.id, target));
+  assert.equal(p.tokens.length, 1);
+  g.phase = 'main';
+  E.startEncounter(g, idx, 'E9'); // 摩耗
+  let guard = 20;
+  while (g.phase === 'encounterWear' && guard-- > 0) CPU.cpuResolveWearOne(g);
+  assert.ok(p.friendCards.includes('sci_cannon')); // カードは摩耗で失わない
+  assert.equal(E.combatBonusFromCards(p), 2);
+});
+
 test('CPU よわい: 4人で数十局が全部止まらず終わる', () => {
   let finished = 0;
   const GAMES = 30;

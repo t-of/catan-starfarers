@@ -4,6 +4,7 @@
 
 export const RES_COLOR = { ore: '#9aa3b0', fuel: '#ff8a52', carbon: '#6d7d74', food: '#5fd58a', goods: '#c99bff' };
 export const PLAYER_COLORS = ['#ff6b6b', '#5ecbff', '#ffd35c', '#8cf59a'];
+const RACE_SHORT = { greenFolk: '緑', diplomat: '外交', merchant: '商人', scientist: '科学' }; // 3.9: 前哨基地の種族を短く示す
 
 const svgNS = 'http://www.w3.org/2000/svg';
 export function el(tag, attrs, parent) {
@@ -71,6 +72,10 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     const v = board.vertices[sector.centerVertexId];
     if (sector.kind === 'outpost') {
       el('circle', { cx: v.x, cy: v.y, r: 0.22, fill: 'none', stroke: '#8fb8ff', 'stroke-width': 0.05 }, svg);
+      if (sector.race) {
+        const rt = el('text', { x: v.x, y: v.y + 0.08, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#8fb8ff' }, svg);
+        rt.textContent = RACE_SHORT[sector.race] || '';
+      }
       sector.tradeStations.forEach((ts, i) => {
         const ang = (i / 5) * Math.PI * 2;
         el('rect', { x: v.x + Math.cos(ang) * 0.42 - 0.07, y: v.y + Math.sin(ang) * 0.42 - 0.07, width: 0.14, height: 0.14, fill: PLAYER_COLORS[ts.owner] }, svg);

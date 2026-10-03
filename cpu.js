@@ -52,7 +52,7 @@ function cpuMainStep(game) {
   // 植民地・交易所を建てられる船があれば、まず建てる
   for (const ship of p.ships) {
     if (ship.kind === 'colony' && E.canBuildColonyAt(game, ship.id)) { E.buildColonyAt(game, ship.id); return true; }
-    if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) { E.buildTradeStationAt(game, ship.id); return true; }
+    if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) { E.buildTradeStationAt(game, ship.id); resolvePendingCardsCpu(game); return true; }
   }
 
   const actions = [];
@@ -123,6 +123,28 @@ export function cpuResolveEncounter(game) {
   if (pending.kind === 'pickUpgrade') return E.encounterAnswer(game, { kind: pick(['booster', 'cannon', 'pod']) });
   return false;
 }
+// 友好カード選び（3.9）: 残りカードからでたらめに1枚
+export function cpuPickFriendshipCard(game) {
+  if (game.phase !== 'friendship' || !game.pendingFriendship) return false;
+  const sector = game.board.sectors[game.pendingFriendship.sectorId];
+  const cardId = pick(sector.friendCardsLeft);
+  return cardId != null ? E.pickFriendshipCard(game, cardId) : false;
+}
+// 銀河救援基金（3.9）: でたらめな資源を1枚
+export function cpuResolveGalacticFundOne(game) {
+  if (game.phase !== 'galacticFund') return false;
+  const d = game.pendingGalacticFund[0];
+  if (!d) return false;
+  return E.resolveGalacticFund(game, d.player, pick(E.RESOURCES));
+}
+// 友好カード選び・銀河救援基金が残っている間、自動で片付ける（誰の分でも）
+export function resolvePendingCardsCpu(game) {
+  let guard = 20;
+  while ((game.phase === 'friendship' || game.phase === 'galacticFund') && guard-- > 0) {
+    if (game.phase === 'friendship') { if (!cpuPickFriendshipCard(game)) break; }
+    else if (!cpuResolveGalacticFundOne(game)) break;
+  }
+}
 // 摩耗（E9）の同数選択・8枚以上の捨て札を、相手がCPUの分だけ自動で片付ける
 // （貨物ポッド→大砲→ブースターの順で残す＝ブースターから手放す。仕様3.8 E9）
 export function cpuResolveWearOne(game) {
@@ -170,7 +192,7 @@ export function cpuPlayFlight(game, rng = Math.random) {
     E.moveShip(game, ship.id, target);
     if (game.phase === 'gameOver') return;
     if (ship.kind === 'colony' && E.canBuildColonyAt(game, ship.id)) E.buildColonyAt(game, ship.id);
-    else if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) E.buildTradeStationAt(game, ship.id);
+    else if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) { E.buildTradeStationAt(game, ship.id); resolvePendingCardsCpu(game); }
     if (game.phase === 'gameOver') return;
   }
 }
@@ -181,6 +203,7 @@ export function playTurn(game, rng = Math.random) {
   while (game.phase.startsWith('setup')) { if (!cpuSetupStep(game)) break; }
   if (game.phase === 'gameOver') return;
   if (game.phase === 'roll') E.rollDice(game, rng);
+  resolvePendingCardsCpu(game); // 銀河救援基金（産出直後に起きる）
   while (game.phase === 'discard') {
     const pending = game.pendingDiscards[0];
     if (!pending) break;
