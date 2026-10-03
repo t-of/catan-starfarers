@@ -1,0 +1,19 @@
+{
+  "id": "./",
+  "name": "catan-starfarers — 宇宙を開拓するボードゲームの試作",
+  "short_name": "catan-starfarers",
+  "description": "母船を振って速さを決め、植民船と交易船で星々へ。植民地を広げ15点を目指す3〜4人のボードゲームの試作。CPUと遊べます。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0c10",
+  "theme_color": "#0b0c10",
+  "lang": "ja",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,141 @@
+'use strict';
+// CPU（画面・音に触らない）。engine.js の公開関数だけを使って手を打つ。
+// 「よわい」だけ作る（仕様8章・作業1）: 合法手からほぼでたらめ、植民地・交易所を建てられるなら建てる。
+import * as E from './engine.js';
+
+export const LEVELS = [{ id: 'weak', name: 'よわい' }];
+
+const rnd = (n) => Math.floor(Math.random() * n);
+const pick = (arr) => (arr.length ? arr[rnd(arr.length)] : undefined);
+
+function randomDiscard(game, playerIdx, count) {
+  const res = { ...game.players[playerIdx].resources };
+  const out = { ore: 0, fuel: 0, carbon: 0, food: 0, goods: 0 };
+  let left = count;
+  const keys = E.RESOURCES.slice();
+  while (left > 0) {
+    const avail = keys.filter((k) => res[k] - out[k] > 0);
+    if (!avail.length) break;
+    const k = pick(avail);
+    out[k]++; left--;
+  }
+  return out;
+}
+
+// セットアップ中（カタンの植民地に3周、4周目の宇宙港セット）を1手ぶん進める
+function cpuSetupStep(game) {
+  if (game.phase === 'setupColony') {
+    const sites = E.availableSetupColonySites(game);
+    const vid = pick(sites);
+    if (vid != null) E.setupPlaceColony(game, vid);
+    return true;
+  }
+  if (game.phase === 'setupPort') {
+    const idx = E.currentPlayer(game);
+    const p = game.players[idx];
+    const colonyVertexId = pick(p.colonies);
+    if (colonyVertexId == null) return false;
+    const shipKind = Math.random() < 0.5 ? 'colony' : 'trade';
+    const bonusKind = Object.entries(game.bonusPool).find(([, n]) => n > 0);
+    E.setupDoPortRound(game, { colonyVertexId, shipKind, bonusKind: bonusKind ? bonusKind[0] : null });
+    return true;
+  }
+  return false;
+}
+
+// 交易・建設フェイズの手を1つ、でたらめに選んで打つ（建てられるならなるべく建てる）
+function cpuMainStep(game) {
+  const idx = E.currentPlayer(game);
+  const p = game.players[idx];
+
+  // 植民地・交易所を建てられる船があれば、まず建てる
+  for (const ship of p.ships) {
+    if (ship.kind === 'colony' && E.canBuildColonyAt(game, ship.id)) { E.buildColonyAt(game, ship.id); return true; }
+    if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) { E.buildTradeStationAt(game, ship.id); return true; }
+  }
+
+  const actions = [];
+  const afford = (cost) => Object.entries(cost).every(([k, v]) => (p.resources[k] || 0) >= v);
+
+  // 船が1隻も無いと何も進まなくなるので、最優先でその材料をそろえる（でたらめな交易で尽きるのを防ぐ）
+  if (p.ships.length === 0 && p.shipsAvailable > 0 && p.spaceports.length) {
+    const missingFor = (cost) => Object.entries(cost).reduce((a, [k, v]) => a + Math.max(0, v - (p.resources[k] || 0)), 0);
+    const want = missingFor(E.COSTS.colonyShip) <= missingFor(E.COSTS.tradeShip) ? E.COSTS.colonyShip : E.COSTS.tradeShip;
+    Object.entries(want).forEach(([wantRes, need]) => {
+      if ((p.resources[wantRes] || 0) >= need) return;
+      E.RESOURCES.forEach((give) => {
+        if (give === wantRes) return;
+        if (want[give] && (p.resources[give] || 0) <= want[give]) return; // 船自体に要るものは手放さない
+        if ((p.resources[give] || 0) >= (give === 'goods' ? 2 : 3)) actions.push(() => E.bankTrade(game, give, wantRes));
+      });
+    });
+  }
+  if (actions.length) { const action = pick(actions); return action(); }
+
+  // 実際に打てる手だけを候補にする（足りない手を選んで手番を無駄にしないため）
+  if (p.colonies.length && p.spaceportSupply > 0 && afford(E.COSTS.spaceport)) {
+    p.colonies.forEach((v) => actions.push(() => E.buildSpaceport(game, v)));
+  }
+  if (p.shipsAvailable > 0 && p.ships.length < 3) {
+    p.spaceports.forEach((v) => {
+      E.spaceportSitesFor(game, v).forEach((site) => {
+        if (afford(E.COSTS.colonyShip)) actions.push(() => E.buildColonyShip(game, site));
+        if (afford(E.COSTS.tradeShip)) actions.push(() => E.buildTradeShip(game, site));
+      });
+    });
+  }
+  if (p.ships.length > 0) {
+    if (p.boosters < E.MAX_BOOSTERS && afford(E.COSTS.booster)) actions.push(() => E.buyUpgrade(game, 'booster'));
+    if (p.cannons < E.MAX_CANNONS && afford(E.COSTS.cannon)) actions.push(() => E.buyUpgrade(game, 'cannon'));
+    if (p.pods < E.MAX_PODS && afford(E.COSTS.pod)) actions.push(() => E.buyUpgrade(game, 'pod'));
+  }
+  E.RESOURCES.forEach((give) => {
+    if (p.resources[give] < (give === 'goods' ? 2 : 3)) return;
+    E.RESOURCES.forEach((want) => { if (give !== want) actions.push(() => E.bankTrade(game, give, want)); });
+  });
+  const action = pick(actions);
+  return action ? action() : null; // null: 今は打てる手が無い（手番を切り上げる）
+}
+
+// 1人ぶんの手番をまるごと進める（ロール〜手番終了まで）。discard/steal は他人の分も含めて自動で片付ける
+export function playTurn(game, rng = Math.random) {
+  while (game.phase.startsWith('setup')) { if (!cpuSetupStep(game)) break; }
+  if (game.phase === 'gameOver') return;
+  if (game.phase === 'roll') E.rollDice(game, rng);
+  while (game.phase === 'discard') {
+    const pending = game.pendingDiscards[0];
+    if (!pending) break;
+    E.discardCards(game, pending.player, randomDiscard(game, pending.player, pending.count));
+  }
+  if (game.phase === 'steal') {
+    const targets = E.sevenTargets(game);
+    E.resolveSteal(game, pick(targets));
+  }
+  if (game.phase === 'gameOver') return;
+  let guard = 60;
+  while (game.phase === 'main' && guard-- > 0) {
+    if (cpuMainStep(game) == null) break; // 今打てる手が無いので切り上げる（失敗した1回では止めない）
+    if (game.phase === 'gameOver') return;
+  }
+  if (game.phase === 'gameOver') return;
+  if (E.canFly(game)) {
+    E.shakeMothership(game, rng);
+    const p = game.players[E.currentPlayer(game)];
+    let moveGuard = 20;
+    while (moveGuard-- > 0) {
+      const ship = p.ships.find((s) => s.movesLeft > 0);
+      if (!ship) break;
+      const stops = E.shipReachableStops(game, ship.id);
+      const target = pick([...stops.keys()]);
+      if (target == null) { ship.movesLeft = 0; continue; }
+      E.moveShip(game, ship.id, target);
+      if (game.phase === 'gameOver') return;
+      // 止まれた場所で建てられるなら建てる
+      if (ship.kind === 'colony' && E.canBuildColonyAt(game, ship.id)) E.buildColonyAt(game, ship.id);
+      else if (ship.kind === 'trade' && E.canBuildTradeStationAt(game, ship.id)) E.buildTradeStationAt(game, ship.id);
+      if (game.phase === 'gameOver') return;
+    }
+  }
+  if (game.phase === 'gameOver') return;
+  E.endTurn(game);
+}
