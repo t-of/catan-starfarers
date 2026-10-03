@@ -39,9 +39,21 @@
         <button class="pill" data-wak="install" hidden>アプリにする</button>
         <button class="pill" id="soundBtn" aria-pressed="true">音 オン</button>
         <button class="pill" id="cpuSpeedBtn">CPU ふつう</button>
+        <button class="pill" id="helpBtn">遊び方</button>
         <button class="pill" data-wak="share">共有</button>
       </div>
     </header>
+
+    <dialog class="help-dialog" id="helpDialog">
+      <h2>30秒でわかる遊び方</h2>
+      <ul>
+        <li>3〜4人で1台の画面を回して遊ぶ、宇宙を開拓するボードゲームの試作です。</li>
+        <li>手番は「サイコロ（産出）」→「交易・建設」→「母船を振って飛行」の順。黒が出たら遭遇が起こります。</li>
+        <li>植民船で植民地を、交易船で前哨基地に交易所を建て、速さの分だけ星々を進みます。</li>
+        <li>植民地・宇宙港・友好マーカー・名声などの点を合計し、自分の手番中に15点になれば勝ちです。</li>
+      </ul>
+      <button type="button" class="btn btn--accent" id="helpCloseBtn">わかった</button>
+    </dialog>
 
     <!-- 席の設定 -->
     <section class="setup" id="setupPanel">

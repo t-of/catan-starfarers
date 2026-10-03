@@ -51,7 +51,7 @@ const SOUND = {
   rob: () => beep(220, 0.2),
   shake: () => beep(300, 0.08),
   reveal: () => beep(500, 0.06),
-  clear: () => { beep(600, 0.08); setTimeout(() => beep(760, 0.1), 90); },
+  clear: () => { beep(600, 0.08); setTimeout(() => beep(760, 0.1), 90); setTimeout(() => beep(920, 0.12), 180); },
   move: () => beep(700, 0.03),
   shortage: () => beep(180, 0.08),
   win: () => { beep(660, 0.15); setTimeout(() => beep(880, 0.25), 140); },
@@ -59,6 +59,7 @@ const SOUND = {
   encWin: () => { beep(500, 0.09); setTimeout(() => beep(700, 0.12), 90); },
   encLose: () => { beep(400, 0.09); setTimeout(() => beep(260, 0.14), 90); },
   jump: () => { beep(500, 0.05); setTimeout(() => beep(900, 0.1), 60); },
+  friend: () => { beep(440, 0.3); beep(554, 0.3); beep(659, 0.3); },
 };
 function playEvents() {
   if (!game) return;
@@ -162,6 +163,12 @@ const cpuSpeedBtn = document.getElementById('cpuSpeedBtn');
 function showCpuSpeed() { cpuSpeedBtn.textContent = 'CPU ' + CPU_SPEEDS[cpuSpeed][0]; }
 cpuSpeedBtn.addEventListener('click', () => { cpuSpeed = (cpuSpeed + 1) % CPU_SPEEDS.length; save('cpuSpeed', cpuSpeed); showCpuSpeed(); });
 showCpuSpeed();
+
+// 遊び方ダイアログ(30秒でわかる短い説明)
+const helpDialog = document.getElementById('helpDialog');
+document.getElementById('helpBtn').addEventListener('click', () => helpDialog.showModal());
+document.getElementById('helpCloseBtn').addEventListener('click', () => helpDialog.close());
+helpDialog.addEventListener('click', (e) => { if (e.target === helpDialog) helpDialog.close(); });
 
 // ---- ゲームの状態 ----
 let game = null;
