@@ -59,15 +59,16 @@ const BASE_SPEED_ON_BLACK = 3; // 0.I・3.7: 黒が出たら基本の速さは�
 
 // ---- 3.8: 自前の遭遇20枚（文面は自分で書いた。公式の型だけを借りる） ----
 // kind: 'yesno'（はい/いいえ）・'amount'（0〜maxの数を選ぶ）・'all'（全員が対象。選べない＝摩耗）
+// hints: 選択肢の下に出す結果の一言（yesno は {yes,no}、amount は枚数ごとの配列）。answerYesNo・answerAmount を変えたら合わせる
 export const ENCOUNTERS = [
-  { id: 'E1', name: '商人の船', count: 3, kind: 'amount', max: 3, prompt: '商人の船と出会った。資源を何枚贈る？' },
-  { id: 'E2', name: '海賊の要求', count: 3, kind: 'yesno', prompt: '海賊が現れ、資源2枚を要求してきた。渡す？' },
-  { id: 'E3', name: '海賊の待ち伏せ', count: 2, kind: 'yesno', prompt: '海賊に待ち伏せされた。戦う？' },
-  { id: 'E4', name: '旅人', count: 2, kind: 'amount', max: 2, prompt: '旅人と出会った。資源を何枚贈る？' },
-  { id: 'E5', name: 'ワームホール', count: 2, kind: 'yesno', prompt: 'ワームホールを見つけた。入る？' },
-  { id: 'E6', name: '遭難船', count: 2, kind: 'yesno', prompt: '遭難した船を見つけた。助ける？' },
-  { id: 'E7', name: '無人の補給基地', count: 2, kind: 'yesno', prompt: '無人の補給基地を見つけた。調べる？' },
-  { id: 'E8', name: '迷子の交易船', count: 2, kind: 'yesno', prompt: '迷子の交易船を見つけた。引き取る？' },
+  { id: 'E1', name: '商人の船', count: 3, kind: 'amount', max: 3, prompt: '商人の船と出会った。資源を何枚贈る？', hints: ['船が1隻止まる', '選んだ資源を1枚', '名声+1・選んだ資源を3枚', '選んだ資源を2枚'] },
+  { id: 'E2', name: '海賊の要求', count: 3, kind: 'yesno', prompt: '海賊が現れ、資源2枚を要求してきた。渡す？', hints: { yes: '資源2枚を失う', no: '戦う。勝てば名声+1、負けるとアップグレード1つを失い船1隻が止まる' } },
+  { id: 'E3', name: '海賊の待ち伏せ', count: 2, kind: 'yesno', prompt: '海賊に待ち伏せされた。戦う？', hints: { yes: '勝てば全員から1枚ずつ奪い名声+1、負けると名声-1とアップグレード1つ', no: '速さで逃げる。負けると船1隻が止まる' } },
+  { id: 'E4', name: '旅人', count: 2, kind: 'amount', max: 2, prompt: '旅人と出会った。資源を何枚贈る？', hints: ['何も起きない', '船を好きな所へ跳ばせる', '名声+1・船を好きな所へ跳ばせる'] },
+  { id: 'E5', name: 'ワームホール', count: 2, kind: 'yesno', prompt: 'ワームホールを見つけた。入る？', hints: { yes: '速さで勝てば船を好きな所へ跳ばせる、負けると船1隻が止まる', no: '何も起きない' } },
+  { id: 'E6', name: '遭難船', count: 2, kind: 'yesno', prompt: '遭難した船を見つけた。助ける？', hints: { yes: '資源1枚を渡して名声+2（手札が無ければ名声+1）', no: '名声-1' } },
+  { id: 'E7', name: '無人の補給基地', count: 2, kind: 'yesno', prompt: '無人の補給基地を見つけた。調べる？', hints: { yes: '戦闘力4以上ならアップグレード1つ、足りないと船1隻が止まる', no: '何も起きない' } },
+  { id: 'E8', name: '迷子の交易船', count: 2, kind: 'yesno', prompt: '迷子の交易船を見つけた。引き取る？', hints: { yes: '交易船を1隻もらう', no: '名声+1' } },
   { id: 'E9', name: '摩耗', count: 2, kind: 'all', prompt: '母船のあちこちがすり減っている…' },
 ];
 

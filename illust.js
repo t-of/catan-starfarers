@@ -36,8 +36,8 @@ export function viewBoxOf(board) {
 }
 
 // 盤全体を描く。onVertexTap(vertexId) はどの交点をタップしても呼ばれる。
-// highlight: Set<vertexId>（光らせて押せることを示す）。ships は {vertexId,ownerIdx,kind,selected} の配列。
-export function renderBoard(svg, board, { highlight = new Set(), selectedShipVertex = null, onVertexTap } = {}) {
+// highlight: Set<vertexId>（光らせて押せることを示す）。shipKindOf(owner, shipId) は 'colony' / 'trade' を返す。
+export function renderBoard(svg, board, { highlight = new Set(), selectedShipVertex = null, onVertexTap, shipKindOf = () => 'colony' } = {}) {
   svg.innerHTML = '';
   const [x, y, w, h] = viewBoxOf(board);
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
@@ -136,9 +136,14 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     const selected = v.id === selectedShipVertex;
     if (selected) el('circle', { cx: v.x, cy: v.y, r: 0.3, fill: 'none', stroke: '#fff', 'stroke-width': 0.04, opacity: 0.8 }, svg);
     const g = el('g', {}, svg);
-    el('circle', { cx: v.x, cy: v.y, r: 0.2, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
-    const label = el('text', { x: v.x, y: v.y, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 0.2, fill: '#0a0d1c' }, g);
-    label.textContent = '◆'; // kind(colony/trade)は選んだ時の説明文で示す。アイコンは共通の船印でよい
+    // 植民船は丸に家、交易船はひし形に箱で見分ける
+    const trade = shipKindOf(v.shipHere.owner, v.shipHere.shipId) === 'trade';
+    const r = 0.22;
+    if (trade) el('polygon', { points: `${v.x},${v.y - r} ${v.x + r},${v.y} ${v.x},${v.y + r} ${v.x - r},${v.y}`, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
+    else el('circle', { cx: v.x, cy: v.y, r: 0.2, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
+    const s = 0.07;
+    if (trade) el('rect', { x: v.x - s, y: v.y - s, width: s * 2, height: s * 2, fill: '#0a0d1c' }, g);
+    else el('polygon', { points: `${v.x},${v.y - s * 1.4} ${v.x + s * 1.2},${v.y - s * 0.2} ${v.x + s * 1.2},${v.y + s * 1.2} ${v.x - s * 1.2},${v.y + s * 1.2} ${v.x - s * 1.2},${v.y - s * 0.2}`, fill: '#0a0d1c' }, g);
   });
 
   // 行ける場所・タップできる場所を光らせる

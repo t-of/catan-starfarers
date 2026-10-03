@@ -760,3 +760,10 @@ test('CPUの交易の答えは必ず合法（持っていない物を出さな�
     assert.equal(CPU.acceptTrade(g, other, { ore: 1 }, { carbon: 1 }), false);
   }
 });
+
+test('遭遇: 選べるカードには選択肢ごとの結果の一言がある', () => {
+  for (const d of E.ENCOUNTERS) {
+    if (d.kind === 'yesno') assert.ok(d.hints.yes && d.hints.no, d.id);
+    if (d.kind === 'amount') assert.equal(d.hints.length, d.max + 1, d.id);
+  }
+});

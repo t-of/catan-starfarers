@@ -346,7 +346,7 @@ function onVertexTap(vid) {
   }
 }
 function renderBoard() {
-  I.renderBoard(els.board, game.board, { highlight: highlightSet(), selectedShipVertex: selectedShipVertex(), onVertexTap });
+  I.renderBoard(els.board, game.board, { shipKindOf: (owner, id) => game.players[owner].ships.find((s) => s.id === id)?.kind, highlight: highlightSet(), selectedShipVertex: selectedShipVertex(), onVertexTap });
 }
 
 // ================================================================
@@ -573,9 +573,9 @@ function renderEncounterPanel() {
   const pending = enc.pending;
   let body = '';
   if (pending.kind === 'yesno') {
-    body = `<div class="enc-opts"><button class="enc-opt-btn" data-act="yes"><span>はい</span></button><button class="enc-opt-btn" data-act="no"><span>いいえ</span></button></div>`;
+    body = `<div class="enc-opts"><button class="enc-opt-btn" data-act="yes"><span>はい</span><small class="enc-hint">${def.hints.yes}</small></button><button class="enc-opt-btn" data-act="no"><span>いいえ</span><small class="enc-hint">${def.hints.no}</small></button></div>`;
   } else if (pending.kind === 'amount') {
-    body = `<div class="res-pick">${Array.from({ length: pending.max + 1 }, (_, n) => `<button data-act="amount" data-n="${n}">${n}枚</button>`).join('')}</div>`;
+    body = `<div class="enc-opts">${Array.from({ length: pending.max + 1 }, (_, n) => `<button class="enc-opt-btn" data-act="amount" data-n="${n}"><span>${n}枚</span><small class="enc-hint">${def.hints[n]}</small></button>`).join('')}</div>`;
   } else if (pending.kind === 'pickShip') {
     body = `<div class="enc-opts">${game.players[idx].ships.map((s) => `<button class="enc-opt-btn" data-act="ship" data-id="${s.id}"><span>${s.kind === 'colony' ? '植民船' : '交易船'}</span></button>`).join('')}</div>`;
   } else if (pending.kind === 'pickResource') {
