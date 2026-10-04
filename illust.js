@@ -165,10 +165,10 @@ function shipSpriteInto(parent, trade, col) {
 // 新しく建った印: 渡した絵(elGroup)をふわっと現れさせ、まわりに光の輪を広げる
 function appearBurst(svg, elGroup, x, y, color) {
   elGroup.setAttribute('opacity', '0');
-  el('animate', { attributeName: 'opacity', values: '0;1', dur: '0.5s', fill: 'freeze' }, elGroup);
+  el('animate', { attributeName: 'opacity', values: '0;1', dur: '0.5s', fill: 'freeze', begin: 'indefinite' }, elGroup);
   const ring = el('circle', { cx: x, cy: y, r: 0.05, fill: 'none', stroke: color, 'stroke-width': 0.05, opacity: 0.85 }, svg);
-  el('animate', { attributeName: 'r', values: '0.05;0.42', dur: '0.55s', fill: 'freeze' }, ring);
-  el('animate', { attributeName: 'opacity', values: '0.85;0', dur: '0.55s', fill: 'freeze' }, ring);
+  el('animate', { attributeName: 'r', values: '0.05;0.42', dur: '0.55s', fill: 'freeze', begin: 'indefinite' }, ring);
+  el('animate', { attributeName: 'opacity', values: '0.85;0', dur: '0.55s', fill: 'freeze', begin: 'indefinite' }, ring);
 }
 
 // 盤全体を描く。onVertexTap(vertexId) はどの交点をタップしても呼ばれる。
@@ -250,8 +250,8 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     // 産出: 出た目がこの惑星の数字に当たっていたら一瞬光る輪を広げる
     if (motion && diceFlash != null && hex.disc && hex.disc.faceUp && !hex.disc.token && hex.disc.numbers.includes(diceFlash)) {
       const flashRing = el('circle', { cx, cy, r, fill: 'none', stroke: '#fff176', 'stroke-width': 0.08, opacity: 0.9 }, svg);
-      el('animate', { attributeName: 'r', values: `${r};${r + 0.3}`, dur: '0.6s', fill: 'freeze' }, flashRing);
-      el('animate', { attributeName: 'opacity', values: '0.9;0', dur: '0.6s', fill: 'freeze' }, flashRing);
+      el('animate', { attributeName: 'r', values: `${r};${r + 0.3}`, dur: '0.6s', fill: 'freeze', begin: 'indefinite' }, flashRing);
+      el('animate', { attributeName: 'opacity', values: '0.9;0', dur: '0.6s', fill: 'freeze', begin: 'indefinite' }, flashRing);
     }
     if (hex.resource === 'goods') {
       const frontId = hexDefId(hex, 'ringFront');
@@ -281,7 +281,7 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       const t = el('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': hex.disc.token ? 0.26 : 0.38, 'font-weight': 700, fill: textFill }, inner);
       t.textContent = label;
       // めくれる: 横に潰れて戻る(カードを裏返す見た目)
-      if (isFlip) el('animateTransform', { attributeName: 'transform', type: 'scale', values: '1 1;0.05 1;1 1', keyTimes: '0;0.5;1', dur: '0.4s', fill: 'freeze' }, inner);
+      if (isFlip) el('animateTransform', { attributeName: 'transform', type: 'scale', values: '1 1;0.05 1;1 1', keyTimes: '0;0.5;1', dur: '0.4s', fill: 'freeze', begin: 'indefinite' }, inner);
     }
   });
 
@@ -363,7 +363,7 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       const nose = el('g', { transform: 'rotate(90)' }, flyG); // 機首(-y)を animateMotion の基準(+x)に合わせる
       el('ellipse', { cx: 0, cy: 0.3, rx: 0.06, ry: 0.22, fill: col, opacity: 0.45, filter: 'url(#shipGlow)' }, nose); // エンジンの尾
       shipSpriteInto(nose, trade, col);
-      el('animateMotion', { dur: `${animDur}s`, path: `M ${from.x} ${from.y} L ${v.x} ${v.y}`, rotate: 'auto', fill: 'freeze', calcMode: 'linear' }, flyG);
+      el('animateMotion', { dur: `${animDur}s`, path: `M ${from.x} ${from.y} L ${v.x} ${v.y}`, rotate: 'auto', fill: 'freeze', begin: 'indefinite', calcMode: 'linear' }, flyG);
     }
   });
 
@@ -384,6 +384,8 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     };
   }
   svg.__prevSnap = next;
+  // 1 回だけのアニメは begin を省くと文書の 0 秒から数えられ、描き直したときにはもう終わっている。いま始める
+  svg.querySelectorAll('[begin="indefinite"]').forEach((a) => a.beginElement());
 }
 
 // 母船の玉（y/r/b/k）の色と名前
