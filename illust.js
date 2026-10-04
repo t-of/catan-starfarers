@@ -133,9 +133,53 @@ function buildSurfacePatterns(defs) {
   }
 }
 
+// 前回描いたときの船・建物・ディスクの状態（svg 要素に直接ぶら下げる。動き＝今回との差分なので、ここでだけ比べる）
+function discStateOf(hex) {
+  if (!hex.disc) return null;
+  if (hex.disc.token) return `t:${hex.disc.token.kind}`;
+  return hex.disc.faceUp ? `n:${hex.disc.numbers.join(',')}` : 'hidden';
+}
+function snapshotBoard(board) {
+  const ships = {};
+  board.vertices.forEach((v) => { if (v.shipHere) ships[`${v.shipHere.owner}:${v.shipHere.shipId}`] = v.id; });
+  const buildings = {};
+  board.vertices.forEach((v) => { if (v.building) buildings[v.id] = v.building.type; });
+  const stations = {};
+  board.sectors.forEach((s) => (s.tradeStations || []).forEach((ts, i) => { stations[`${s.id}:${i}`] = ts.owner; }));
+  const discs = {};
+  board.hexes.forEach((hex) => { const s = discStateOf(hex); if (s != null) discs[hex.id] = s; });
+  return { ships, buildings, stations, discs };
+}
+// 船の絵（機首を上(-y)に向けた形。局所座標 0,0 中心。static な船にも、滑らせる船のクローンにも使う）
+function shipSpriteInto(parent, trade, col) {
+  el('circle', { cx: 0, cy: 0.2, r: 0.1, fill: col, opacity: 0.6, filter: 'url(#shipGlow)' }, parent);
+  if (trade) {
+    el('polygon', { points: '0,-0.22 0.22,0 0,0.22 -0.22,0', fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, parent);
+    el('rect', { x: -0.07, y: -0.07, width: 0.14, height: 0.14, fill: '#0a0d1c' }, parent);
+  } else {
+    el('path', { d: 'M 0 -0.22 L 0.15 0.04 L 0.15 0.16 L -0.15 0.16 L -0.15 0.04 Z', fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, parent);
+    el('circle', { cx: 0, cy: -0.02, r: 0.055, fill: '#0a0d1c' }, parent);
+  }
+}
+
+// 新しく建った印: 渡した絵(elGroup)をふわっと現れさせ、まわりに光の輪を広げる
+function appearBurst(svg, elGroup, x, y, color) {
+  elGroup.setAttribute('opacity', '0');
+  el('animate', { attributeName: 'opacity', values: '0;1', dur: '0.5s', fill: 'freeze' }, elGroup);
+  const ring = el('circle', { cx: x, cy: y, r: 0.05, fill: 'none', stroke: color, 'stroke-width': 0.05, opacity: 0.85 }, svg);
+  el('animate', { attributeName: 'r', values: '0.05;0.42', dur: '0.55s', fill: 'freeze' }, ring);
+  el('animate', { attributeName: 'opacity', values: '0.85;0', dur: '0.55s', fill: 'freeze' }, ring);
+}
+
 // 盤全体を描く。onVertexTap(vertexId) はどの交点をタップしても呼ばれる。
 // highlight: Set<vertexId>（光らせて押せることを示す）。shipKindOf(owner, shipId) は 'colony' / 'trade' を返す。
-export function renderBoard(svg, board, { highlight = new Set(), selectedShipVertex = null, onVertexTap, shipKindOf = () => 'colony' } = {}) {
+// diceFlash: 直前に振った出目（産出が当たった惑星を光らせる。1回だけ使うので呼び出し側がその回の描画でだけ渡す）
+// animMs: CPU の速さ設定から来る目安の間（短いほどアニメも短くする）
+export function renderBoard(svg, board, { highlight = new Set(), selectedShipVertex = null, onVertexTap, shipKindOf = () => 'colony', diceFlash = null, animMs = 500 } = {}) {
+  const prev = svg.__prevSnap; // undefined なら初回描画（続きから始めた直後など）→ 何もアニメしない
+  const next = snapshotBoard(board);
+  const motion = !reduceMotion();
+  const animDur = Math.max(0.12, Math.min(0.8, (animMs / 1000) * 0.9));
   svg.innerHTML = '';
   const [x, y, w, h] = viewBoxOf(board);
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
@@ -203,6 +247,12 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     el('circle', { cx, cy, r, fill: 'url(#planet-shade)' }, planetG);
     // 縁の大気（資源の色でうっすら光る輪）
     el('circle', { cx, cy, r: r + 0.03, fill: 'none', stroke: RES_COLOR[hex.resource], 'stroke-width': 0.05, opacity: 0.55, filter: 'url(#atmBlur)' }, svg);
+    // 産出: 出た目がこの惑星の数字に当たっていたら一瞬光る輪を広げる
+    if (motion && diceFlash != null && hex.disc && hex.disc.faceUp && !hex.disc.token && hex.disc.numbers.includes(diceFlash)) {
+      const flashRing = el('circle', { cx, cy, r, fill: 'none', stroke: '#fff176', 'stroke-width': 0.08, opacity: 0.9 }, svg);
+      el('animate', { attributeName: 'r', values: `${r};${r + 0.3}`, dur: '0.6s', fill: 'freeze' }, flashRing);
+      el('animate', { attributeName: 'opacity', values: '0.9;0', dur: '0.6s', fill: 'freeze' }, flashRing);
+    }
     if (hex.resource === 'goods') {
       const frontId = hexDefId(hex, 'ringFront');
       el('clipPath', { id: frontId }, defs).appendChild(el('rect', { x: cx - r * 1.6, y: cy, width: r * 3.2, height: r * 1.6 }));
@@ -224,9 +274,14 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       }
       // 札は惑星の右下（デザイン案の位置）
       const dx = cx + 0.375, dy = cy + 0.375;
-      el('circle', { cx: dx, cy: dy, r: 0.31, fill: discFill, stroke: '#0a0d1c', 'stroke-width': 0.05 }, svg);
-      const t = el('text', { x: dx, y: dy, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': hex.disc.token ? 0.26 : 0.38, 'font-weight': 700, fill: textFill }, svg);
+      const isFlip = motion && prev && prev.discs[hex.id] === 'hidden' && discStateOf(hex) !== 'hidden';
+      const wrap = el('g', { transform: `translate(${dx} ${dy})` }, svg);
+      const inner = el('g', {}, wrap);
+      el('circle', { cx: 0, cy: 0, r: 0.31, fill: discFill, stroke: '#0a0d1c', 'stroke-width': 0.05 }, inner);
+      const t = el('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': hex.disc.token ? 0.26 : 0.38, 'font-weight': 700, fill: textFill }, inner);
       t.textContent = label;
+      // めくれる: 横に潰れて戻る(カードを裏返す見た目)
+      if (isFlip) el('animateTransform', { attributeName: 'transform', type: 'scale', values: '1 1;0.05 1;1 1', keyTimes: '0;0.5;1', dur: '0.4s', fill: 'freeze' }, inner);
     }
   });
 
@@ -246,7 +301,11 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       }
       sector.tradeStations.forEach((ts, i) => {
         const ang = (i / 5) * Math.PI * 2;
-        el('rect', { x: v.x + Math.cos(ang) * 0.42 - 0.07, y: v.y + Math.sin(ang) * 0.42 - 0.07, width: 0.14, height: 0.14, rx: 0.03, fill: PLAYER_COLORS[ts.owner], stroke: '#0a0d1c', 'stroke-width': 0.015 }, svg);
+        const sx = v.x + Math.cos(ang) * 0.42, sy = v.y + Math.sin(ang) * 0.42;
+        const isNew = motion && prev && prev.stations[`${sector.id}:${i}`] == null;
+        const stG = el('g', {}, svg);
+        el('rect', { x: sx - 0.07, y: sy - 0.07, width: 0.14, height: 0.14, rx: 0.03, fill: PLAYER_COLORS[ts.owner], stroke: '#0a0d1c', 'stroke-width': 0.015 }, stG);
+        if (isNew) appearBurst(svg, stG, sx, sy, PLAYER_COLORS[ts.owner]);
       });
       if (sector.friendshipMarker != null) {
         const t = el('text', { x: v.x, y: v.y - 0.5, 'text-anchor': 'middle', 'font-size': 0.3, fill: PLAYER_COLORS[sector.friendshipMarker] }, svg);
@@ -259,18 +318,20 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       if (v.blocked) { el('circle', { cx: v.x, cy: v.y, r: 0.08, fill: '#444' }, svg); return; }
       if (v.building) {
         const col = PLAYER_COLORS[v.building.owner];
+        const bg = el('g', {}, svg);
         if (v.building.type === 'colony') {
           // 小さな建物: 台座＋ドーム
-          el('rect', { x: v.x - 0.15, y: v.y - 0.02, width: 0.3, height: 0.14, rx: 0.02, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.02 }, svg);
-          el('path', { d: `M ${v.x - 0.13} ${v.y - 0.02} A 0.13 0.15 0 0 1 ${v.x + 0.13} ${v.y - 0.02} Z`, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.02 }, svg);
-          el('circle', { cx: v.x, cy: v.y - 0.1, r: 0.025, fill: '#fff', opacity: 0.8 }, svg);
+          el('rect', { x: v.x - 0.15, y: v.y - 0.02, width: 0.3, height: 0.14, rx: 0.02, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.02 }, bg);
+          el('path', { d: `M ${v.x - 0.13} ${v.y - 0.02} A 0.13 0.15 0 0 1 ${v.x + 0.13} ${v.y - 0.02} Z`, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.02 }, bg);
+          el('circle', { cx: v.x, cy: v.y - 0.1, r: 0.025, fill: '#fff', opacity: 0.8 }, bg);
         } else {
           // 宇宙港: 中心のモジュール＋十字のアンテナ
-          el('rect', { x: v.x - 0.15, y: v.y - 0.15, width: 0.3, height: 0.3, rx: 0.06, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.025 }, svg);
-          el('line', { x1: v.x - 0.22, y1: v.y, x2: v.x + 0.22, y2: v.y, stroke: col, 'stroke-width': 0.03 }, svg);
-          el('line', { x1: v.x, y1: v.y - 0.22, x2: v.x, y2: v.y + 0.22, stroke: col, 'stroke-width': 0.03 }, svg);
-          el('circle', { cx: v.x, cy: v.y, r: 0.05, fill: '#fff', opacity: 0.8 }, svg);
+          el('rect', { x: v.x - 0.15, y: v.y - 0.15, width: 0.3, height: 0.3, rx: 0.06, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.025 }, bg);
+          el('line', { x1: v.x - 0.22, y1: v.y, x2: v.x + 0.22, y2: v.y, stroke: col, 'stroke-width': 0.03 }, bg);
+          el('line', { x1: v.x, y1: v.y - 0.22, x2: v.x, y2: v.y + 0.22, stroke: col, 'stroke-width': 0.03 }, bg);
+          el('circle', { cx: v.x, cy: v.y, r: 0.05, fill: '#fff', opacity: 0.8 }, bg);
         }
+        if (motion && prev && prev.buildings[v.id] == null) appearBurst(svg, bg, v.x, v.y, col);
       } else {
         el('circle', { cx: v.x, cy: v.y, r: 0.08, fill: 'none', stroke: 'rgba(255,255,255,0.35)', 'stroke-width': 0.025 }, svg);
       }
@@ -279,24 +340,30 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
     }
   });
 
-  // 船: 上から見た小さな宇宙船（機首＋船体＋エンジンの光）
+  // 船: 上から見た小さな宇宙船（機首＋船体＋エンジンの光）。前回と交点が違えば、古い場所から機首を向けて滑ってくる絵を重ねる
   board.vertices.forEach((v) => {
     if (!v.shipHere) return;
     const col = PLAYER_COLORS[v.shipHere.owner];
     const selected = v.id === selectedShipVertex;
-    if (selected) el('circle', { cx: v.x, cy: v.y, r: 0.3, fill: 'none', stroke: '#fff', 'stroke-width': 0.04, opacity: 0.8 }, svg);
+    if (selected) {
+      el('circle', { cx: v.x, cy: v.y, r: 0.3, fill: 'none', stroke: '#fff', 'stroke-width': 0.04, opacity: 0.8 }, svg);
+      // 選んだ船のまわりをゆっくり回る光の輪（盤の空気。常に少しだけ動く）
+      if (motion) {
+        const ring = el('circle', { cx: v.x, cy: v.y, r: 0.36, fill: 'none', stroke: '#fff', 'stroke-width': 0.02, opacity: 0.5, 'stroke-dasharray': '0.06 0.1' }, svg);
+        el('animateTransform', { attributeName: 'transform', type: 'rotate', from: `0 ${v.x} ${v.y}`, to: `360 ${v.x} ${v.y}`, dur: '5s', repeatCount: 'indefinite' }, ring);
+      }
+    }
     const trade = shipKindOf(v.shipHere.owner, v.shipHere.shipId) === 'trade';
-    const g = el('g', {}, svg);
-    // エンジンの光（船尾側にうっすら）
-    el('circle', { cx: v.x, cy: v.y + 0.2, r: 0.1, fill: col, opacity: 0.6, filter: 'url(#shipGlow)' }, g);
-    if (trade) {
-      // 交易船: ひし形の貨物船体＋中央の箱
-      el('polygon', { points: `${v.x},${v.y - 0.22} ${v.x + 0.22},${v.y} ${v.x},${v.y + 0.22} ${v.x - 0.22},${v.y}`, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
-      el('rect', { x: v.x - 0.07, y: v.y - 0.07, width: 0.14, height: 0.14, fill: '#0a0d1c' }, g);
-    } else {
-      // 植民船: 流線形の船体＋船窓
-      el('path', { d: `M ${v.x} ${v.y - 0.22} L ${v.x + 0.15} ${v.y + 0.04} L ${v.x + 0.15} ${v.y + 0.16} L ${v.x - 0.15} ${v.y + 0.16} L ${v.x - 0.15} ${v.y + 0.04} Z`, fill: col, stroke: '#0a0d1c', 'stroke-width': 0.03 }, g);
-      el('circle', { cx: v.x, cy: v.y - 0.02, r: 0.055, fill: '#0a0d1c' }, g);
+    shipSpriteInto(el('g', { transform: `translate(${v.x} ${v.y})` }, svg), trade, col);
+    const key = `${v.shipHere.owner}:${v.shipHere.shipId}`;
+    const fromVid = prev && prev.ships[key];
+    if (motion && fromVid != null && fromVid !== v.id) {
+      const from = board.vertices[fromVid];
+      const flyG = el('g', {}, svg);
+      const nose = el('g', { transform: 'rotate(90)' }, flyG); // 機首(-y)を animateMotion の基準(+x)に合わせる
+      el('ellipse', { cx: 0, cy: 0.3, rx: 0.06, ry: 0.22, fill: col, opacity: 0.45, filter: 'url(#shipGlow)' }, nose); // エンジンの尾
+      shipSpriteInto(nose, trade, col);
+      el('animateMotion', { dur: `${animDur}s`, path: `M ${from.x} ${from.y} L ${v.x} ${v.y}`, rotate: 'auto', fill: 'freeze', calcMode: 'linear' }, flyG);
     }
   });
 
@@ -316,6 +383,7 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
       if (t) onVertexTap(Number(t.dataset.vid));
     };
   }
+  svg.__prevSnap = next;
 }
 
 // 母船の玉（y/r/b/k）の色と名前

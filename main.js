@@ -302,7 +302,7 @@ function scheduleCpu() {
   if (isHumanSeat(idx)) return; // 人の番・人の選ぶ場面は画面の操作を待つ
   if (game.phase.startsWith('setup')) { cpuTimer = setTimeout(() => { CPU.cpuSetupTurn(game, seatLevel(idx)); persistAndRender(); }, delay); return; }
   if (game.phase === 'steal') { cpuTimer = setTimeout(() => { CPU.cpuResolveSteal(game, seatLevel(idx)); persistAndRender(); }, delay); return; }
-  if (game.phase === 'roll') { cpuTimer = setTimeout(() => { E.rollDice(game); persistAndRender(); }, delay); return; }
+  if (game.phase === 'roll') { cpuTimer = setTimeout(() => { pendingDiceFlash = E.rollDice(game); persistAndRender(); }, delay); return; }
   if (game.phase === 'main' || game.phase === 'flight') {
     cpuTimer = setTimeout(() => {
       CPU.cpuPlayMainPhase(game, seatLevel(idx), opponentLevelFor);
@@ -366,8 +366,20 @@ function onVertexTap(vid) {
     }
   }
 }
+// 直前にサイコロを振った出目（産出が当たった惑星を光らせるのに1回だけ使う。renderBoard が描いたら消す）
+let pendingDiceFlash = null;
 function renderBoard() {
-  I.renderBoard(els.board, game.board, { shipKindOf: (owner, id) => game.players[owner].ships.find((s) => s.id === id)?.kind, highlight: highlightSet(), selectedShipVertex: selectedShipVertex(), onVertexTap });
+  const diceFlash = pendingDiceFlash;
+  pendingDiceFlash = null;
+  const speedMs = CPU_SPEEDS[cpuSpeed][1];
+  I.renderBoard(els.board, game.board, {
+    shipKindOf: (owner, id) => game.players[owner].ships.find((s) => s.id === id)?.kind,
+    highlight: highlightSet(),
+    selectedShipVertex: selectedShipVertex(),
+    onVertexTap,
+    diceFlash,
+    animMs: speedMs >= 500 ? 600 : speedMs >= 120 ? 300 : 150,
+  });
 }
 
 // ================================================================
@@ -557,7 +569,7 @@ function updateActionBar() {
   els.flyBtn.hidden = !(humanTurn && game.phase === 'main' && E.canFly(game));
   els.endTurnBtn.hidden = !(humanTurn && (game.phase === 'main' || game.phase === 'flight'));
 }
-els.diceBtn.addEventListener('click', () => { if (E.rollDice(game) != null) persistAndRender(); });
+els.diceBtn.addEventListener('click', () => { const t = E.rollDice(game); if (t != null) { pendingDiceFlash = t; persistAndRender(); } });
 els.flyBtn.addEventListener('click', () => { if (E.shakeMothership(game)) persistAndRender(); });
 els.endTurnBtn.addEventListener('click', () => { ui.selectedShip = null; ui.mode = 'idle'; if (E.endTurn(game)) persistAndRender(); });
 els.tradeBtn.addEventListener('click', () => { ui.mode = 'bankTrade'; ui.data = { give: null, want: null }; renderAll(); });
