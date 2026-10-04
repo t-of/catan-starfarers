@@ -37,6 +37,9 @@ function usedVertices(board) {
   return [...vids].map((vid) => board.vertices[vid]);
 }
 
+// 盤の 1 単位（六角形の半径）の最小の大きさ（px）。これより小さくなる画面では、盤を横にスクロールして見る
+const MIN_PX_PER_UNIT = 30;
+
 export function viewBoxOf(board) {
   const used = usedVertices(board);
   const xs = used.map((v) => v.x), ys = used.map((v) => v.y);
@@ -51,6 +54,8 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
   svg.innerHTML = '';
   const [x, y, w, h] = viewBoxOf(board);
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  svg.style.minWidth = `${w * MIN_PX_PER_UNIT}px`;
+  svg.style.minHeight = `${h * MIN_PX_PER_UNIT}px`;
 
   // 背景（宇宙）
   el('rect', { x, y, width: w, height: h, fill: '#070a18' }, svg);
