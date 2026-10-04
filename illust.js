@@ -40,7 +40,7 @@ function usedVertices(board) {
 export function viewBoxOf(board) {
   const used = usedVertices(board);
   const xs = used.map((v) => v.x), ys = used.map((v) => v.y);
-  const pad = 1.2;
+  const pad = 0.5;
   const minX = Math.min(...xs) - pad, minY = Math.min(...ys) - pad;
   return [minX, minY, Math.max(...xs) - minX + pad * 2, Math.max(...ys) - minY + pad * 2];
 }
@@ -51,8 +51,6 @@ export function renderBoard(svg, board, { highlight = new Set(), selectedShipVer
   svg.innerHTML = '';
   const [x, y, w, h] = viewBoxOf(board);
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-  // 盤の入れ物（.stage）を盤の形（縦横比）に合わせる。箱の形が違うと周りに空きができてしまうため
-  if (svg.parentElement) svg.parentElement.style.aspectRatio = `${w} / ${h}`;
 
   // 背景（宇宙）
   el('rect', { x, y, width: w, height: h, fill: '#070a18' }, svg);
