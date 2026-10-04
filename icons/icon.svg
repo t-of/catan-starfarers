@@ -1,1 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0b0c10"/><text x="256" y="256" dy=".35em" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="280" fill="#eceef3">C</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b0c10"/>
+
+  <!-- 星 -->
+  <g fill="#e8ecff">
+    <circle cx="90" cy="100" r="4"/>
+    <circle cx="140" cy="340" r="3"/>
+    <circle cx="420" cy="120" r="3.5"/>
+    <circle cx="400" cy="380" r="4"/>
+    <circle cx="80" cy="420" r="3"/>
+    <circle cx="440" cy="260" r="3"/>
+  </g>
+
+  <!-- 輪のある惑星 -->
+  <g transform="translate(372 108)">
+    <ellipse cx="0" cy="0" rx="48" ry="14" fill="none" stroke="#8f9bc8" stroke-width="6" transform="rotate(-18)"/>
+    <circle cx="0" cy="0" r="26" fill="#ff5a6e"/>
+  </g>
+
+  <!-- 宇宙を開拓する区画（六角のセクター） -->
+  <polygon points="406,270 331,399.9 181,399.9 106,270 181,140.1 331,140.1"
+    fill="#1b1f33" stroke="#3a4066" stroke-width="8" stroke-linejoin="round"/>
+
+  <!-- 母船から飛ぶ宇宙船 -->
+  <g transform="translate(256 270)">
+    <polygon points="0,-110 26,-30 -26,-30" fill="#e8ecff"/>
+    <rect x="-26" y="-30" width="52" height="46" rx="10" fill="#c7cfea"/>
+    <polygon points="-26,16 -46,52 -14,38" fill="#8f9bc8"/>
+    <polygon points="26,16 46,52 14,38" fill="#8f9bc8"/>
+    <polygon points="-16,16 16,16 0,88" fill="#ffcf5a"/>
+    <polygon points="-9,16 9,16 0,58" fill="#ffe39a"/>
+  </g>
+</svg>
