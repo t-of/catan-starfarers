@@ -187,8 +187,14 @@ renderSeatsPanel();
 const CPU_SPEEDS = [['ふつう', 500], ['はやい', 120], ['最速', 0]];
 let cpuSpeed = load('cpuSpeed', 0);
 const cpuSpeedBtn = document.getElementById('cpuSpeedBtn');
-function showCpuSpeed() { cpuSpeedBtn.textContent = 'CPU ' + CPU_SPEEDS[cpuSpeed][0]; }
-cpuSpeedBtn.addEventListener('click', () => { cpuSpeed = (cpuSpeed + 1) % CPU_SPEEDS.length; save('cpuSpeed', cpuSpeed); showCpuSpeed(); });
+const cpuSpeedPicker = document.getElementById('cpuSpeedPicker');
+function showCpuSpeed() {
+  cpuSpeedBtn.textContent = 'CPU ' + CPU_SPEEDS[cpuSpeed][0];
+  [...cpuSpeedPicker.children].forEach((b) => b.classList.toggle('is-selected', Number(b.dataset.speed) === cpuSpeed));
+}
+function setCpuSpeed(v) { cpuSpeed = v; save('cpuSpeed', cpuSpeed); showCpuSpeed(); }
+cpuSpeedBtn.addEventListener('click', () => setCpuSpeed((cpuSpeed + 1) % CPU_SPEEDS.length));
+cpuSpeedPicker.addEventListener('click', (e) => { const b = e.target.closest('[data-speed]'); if (b) setCpuSpeed(Number(b.dataset.speed)); });
 showCpuSpeed();
 
 // 遊び方ダイアログ(30秒でわかる短い説明)
