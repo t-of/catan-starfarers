@@ -88,6 +88,7 @@ const els = {
   bankPanel: document.getElementById('bankPanel'),
   logPanel: document.getElementById('logPanel'),
   board: document.getElementById('board'),
+  stageBg: document.getElementById('stageBg'),
   hint: document.getElementById('hint'),
   banner: document.getElementById('banner'),
   handCount: document.getElementById('handCount'),
@@ -112,6 +113,8 @@ els.buildsBtn.addEventListener('click', () => els.buildsDialog.showModal());
 document.getElementById('buildsCloseBtn').addEventListener('click', () => els.buildsDialog.close());
 els.logBtn.addEventListener('click', () => els.logDialog.showModal());
 document.getElementById('logCloseBtn').addEventListener('click', () => els.logDialog.close());
+
+I.renderSpaceBackground(els.stageBg); // 奥の星空は 1 回だけ描く（盤を描き直すたびに変わるとチラつくため）
 
 // ---- 席の設定 ----
 function defaultSeat(i) { return { type: i === 0 ? 'human' : 'cpu', level: 'normal', name: '' }; }
